@@ -68,3 +68,7 @@ class FrequencySpectrumEnv(gym.Env):
 
 
 # TODO: Abstract out different types of rewards and different types of observations
+
+
+
+# TODO: Add ability to save image after some steps showing what agents chose
