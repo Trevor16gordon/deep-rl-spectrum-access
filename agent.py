@@ -1,8 +1,10 @@
 import tensorflow as tf
 import numpy as np
 from model import DDQN
+import pdb
 
 class DynamicSpectrumAccessAgent():
+
     def __init__(self, num_bands, gamma=0.9, replace=100, lr=0.0001, temporal_length=6):
         self.num_bands = num_bands
         self.n_action_space = num_bands + 1
@@ -26,10 +28,11 @@ class DynamicSpectrumAccessAgent():
           if np.random.rand() <= self.epsilon:
               return np.random.choice([i for i in range(self.n_action_space)])
           else:
-              old_states = self.memory.get_last_several_states(self.temporal_length-1)
-              temporal_seq = np.concatenate([old_states, [state]], axis=0)
-              temporal_seq = temporal_seq.reshape((1, self.temporal_length, -1))
-              actions = self.q_net.advantage(temporal_seq)
+            #   old_states = self.memory.get_last_several_states(self.temporal_length-1)
+            #   temporal_seq = np.concatenate([old_states, [state]], axis=0)
+            #   temporal_seq = temporal_seq.reshape((1, self.temporal_length, -1))
+            #   actions = self.q_net.advantage(temporal_seq)
+              actions = self.q_net.advantage(state[np.newaxis, :, :])
               action = np.argmax(actions)
               return action
 
@@ -63,7 +66,45 @@ class DynamicSpectrumAccessAgent():
         self.update_epsilon()
         self.trainstep += 1
 
+
 class ExperienceReplay():
+    
+    def __init__(self, obs_dimensions, temporal_length=6, buffer_size=1000):
+        self.buffer_size = buffer_size
+        self.state_mem = np.zeros((self.buffer_size, temporal_length, obs_dimensions), dtype=np.float32)
+        self.action_mem = np.zeros((self.buffer_size, 1), dtype=np.int32)
+        self.reward_mem = np.zeros((self.buffer_size, 1), dtype=np.float32)
+        self.next_state_mem = np.zeros((self.buffer_size, temporal_length, obs_dimensions), dtype=np.float32)
+        self.done_mem = np.zeros((self.buffer_size, 1), dtype=np.bool)
+        self.obs_dimensions = obs_dimensions
+        self.pointer = 0
+        self.temporal_length = temporal_length
+
+    def add_exp(self, state, action, reward, next_state, done):
+        # if state is None:
+        #     print(f"state is None counter is {self.pointer}")
+        
+        idx  = self.pointer % self.buffer_size 
+        self.state_mem[idx] = state
+        self.action_mem[idx] = action
+        self.reward_mem[idx] = reward
+        self.next_state_mem[idx] = next_state
+        self.done_mem[idx] = 1 - int(done)
+        self.pointer += 1
+
+    def sample_exp(self, batch_size= 64):
+        max_mem = min(self.pointer, self.buffer_size)
+        batch = np.random.choice(max_mem, batch_size, replace=False)
+        states = self.state_mem[batch]
+        actions = self.action_mem[batch]
+        rewards = self.reward_mem[batch]
+        next_states = self.next_state_mem[batch]
+        dones = self.done_mem[batch]
+        return states, actions, rewards, next_states, dones
+
+
+class ExperienceReplayWindowed():
+
     def __init__(self, obs_dimensions, temporal_length=6, buffer_size=1000):
         self.buffer_size = buffer_size
         self.state_mem = np.zeros((self.buffer_size, obs_dimensions), dtype=np.float32)
