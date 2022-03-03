@@ -27,11 +27,9 @@ class FrequencySpectrumEnv(gym.Env):
         info_n = {'n': []}
 
         self.agent_actions = np.zeros((self.num_actions, self.num_agents), dtype=np.int32)
-        
 
         for i, a in enumerate(action_n):
             self.agent_actions[a, i] = 1
-
 
         self.agent_actions_history = np.concatenate([
             self.agent_actions.reshape((1, self.num_actions, self.num_agents)),
@@ -54,7 +52,7 @@ class FrequencySpectrumEnv(gym.Env):
         self.throughput = new_throughput
         
         reward_info = transmissions.copy()
-        reward_info[reward_info >= 2] = 0
+        reward_info[reward_info >= 2] = -1
         reward_info[0] = 0
         reward_n = reward_info[action_n].reshape(-1)
 
@@ -92,7 +90,7 @@ class FrequencySpectrumEnv(gym.Env):
             agent_actions_history (_type_): Complete information about who attempted communication where. Shape is (num_time, num_freq + 1, num_agents)
         
         Returns:
-            list(states): state for all agents has shape (num_in_time, num_agents, __)
+            list(states): state for all agents has shape (num_agents, num_in_time, __)
         """
         agent_actions_history = agent_actions_history.sum(axis=2).reshape((self.temporal_len, -1))
         agent_actions_history[agent_actions_history > 2] = 2
@@ -102,10 +100,6 @@ class FrequencySpectrumEnv(gym.Env):
 
     def _get_observation_aggregate2(self, agent_actions_history):
         """Like _get_observation_aggregate but agents can't see the state of no_transmit action space"""
-        return
-
-    def _get_observation_aggregate2(self, agent_actions_history):
-        """Like _get_observation_aggregate but agents have thier own actions and ACK added as well."""
         return
 
     def reset(self):

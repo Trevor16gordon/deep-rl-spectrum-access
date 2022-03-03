@@ -1,9 +1,65 @@
+""" 
+Agents for dynamic spectrum access problem:
+
+Referenced this webpage: https://towardsdatascience.com/deep-q-network-dqn-ii-b6bf911b6b2c
+"""
+
 import tensorflow as tf
 import numpy as np
 from model import DDQN
+from visualization import plot_and_save_freq_status_and_network_output
 import pdb
 
-class DynamicSpectrumAccessAgent():
+class DynamicSpectrumAccessAgentBase():
+    """Base class for a dynamic spectrum access agent
+
+    Must subclass this and implement existing function
+    """
+
+    def act(self, state):
+        """Given the current state give a distribution on actions
+
+        Args:
+            state (np.array): shape is variable
+
+        Returns:
+            np.array: likelihood on selecting action
+        """
+        raise NotImplementedError
+
+    def observe_result(self, state, action, reward, next_state, done):
+        """Given information about what happened in environment observe what happened
+
+        Typical things to do might be:
+        - Save information in memory
+        - Train
+
+        Args:
+            state (np.array): Varyiable size array for what an agent considers the state input to be
+            action (np.array): _description_
+            reward np.int32: The reward
+            next_state (np.array): Varyiable size array for what an agent considers the state input to be
+            done (bool): Whether the agent is done.
+
+        Raises:
+            NotImplementedError: _description_
+        """
+        raise NotImplementedError
+
+
+class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
+    """Dynamic Spectrum Agent with:
+
+    Model: 
+    - Dueling DQN with memory replay
+    - Target network and memory replay
+
+    Input Data Preparation
+    - Uses just the aggregate
+
+    Args:
+        DynamicSpectrumAccessAgentBase (_type_): _description_
+    """
 
     def __init__(self, num_bands, gamma=0.9, replace=100, lr=0.0001, temporal_length=6):
         self.num_bands = num_bands
@@ -22,8 +78,10 @@ class DynamicSpectrumAccessAgent():
         self.q_net.compile(loss='mse', optimizer=opt)
         self.target_net.compile(loss='mse', optimizer=opt)
         self.temporal_length = temporal_length
+        self.agent_id = [str(x) for x in np.random.randint(0, high=9, size=10).tolist()]
+        self.agent_id = "".join(self.agent_id)
 
-    def act(self, state):
+    def act(self, state, save_visualization_filepath=False):
           
           if np.random.rand() <= self.epsilon:
               return np.random.choice([i for i in range(self.n_action_space)])
@@ -34,7 +92,30 @@ class DynamicSpectrumAccessAgent():
             #   actions = self.q_net.advantage(temporal_seq)
               actions = self.q_net.advantage(state[np.newaxis, :, :])
               action = np.argmax(actions)
+
+              if save_visualization_filepath:
+                  
+                  filename = f"plots/trainstep_{self.trainstep}_{self.agent_id}.png"
+                  plot_and_save_freq_status_and_network_output(state.T, actions.numpy().T, filepath=filename
+                  )
+
               return action
+
+    def observe_result(self, state, action, reward, next_state, done):
+        """Given information about what happened in environment observe what happened
+
+        Args:
+            state (np.array): Shape should be (num_agents, num_in_time, __)
+            action (np.array): _description_
+            reward np.int32: The reward
+            next_state (np.array): Varyiable size array for what an agent considers the state input to be
+            done (bool): Whether the agent is done.
+
+        Raises:
+            NotImplementedError: _description_
+        """
+        self.update_mem(state, action, reward, next_state, done)
+        self.train()
 
     def update_mem(self, state, action, reward, next_state, done):
         self.memory.add_exp(state, action, reward, next_state, done)
@@ -66,6 +147,39 @@ class DynamicSpectrumAccessAgent():
         self.update_epsilon()
         self.trainstep += 1
 
+class DynamicSpectrumAccessAgent2(DynamicSpectrumAccessAgent1):
+    """Dynamic Spectrum Agent with:
+
+    Same as DynamicSpectrumAccessAgent1 but include the chosen action and the reward in the network input space
+
+    Args:
+        DynamicSpectrumAccessAgentBase (_type_): _description_
+    """
+    def __init__(self, num_bands, gamma=0.9, replace=100, lr=0.0001, temporal_length=6):
+        super().__init__(num_bands, gamma, replace, lr, temporal_length)
+        self.last_action = 0
+        self.last_reward = 0
+
+    def observe_result(self, state, action, reward, next_state, done):
+        """Given information about what happened in environment observe what happened
+
+        Same as DynamicSpectrumAccessAgent1 but include the chosen action and the reward in the network input space
+
+        Args:
+            state (np.array): Varyiable size array for what an agent considers the state input to be
+            action (np.array): _description_
+            reward np.int32: The reward
+            next_state (np.array): Varyiable size array for what an agent considers the state input to be
+            done (bool): Whether the agent is done.
+
+        Raises:
+            NotImplementedError: _description_
+        """
+        self.update_mem(state, action, reward, next_state, done)
+
+        self.last_reward = reward
+        self.last_action = action
+        self.train()
 
 class ExperienceReplay():
     
@@ -157,3 +271,4 @@ class ExperienceReplayWindowed():
         next_states = self.sample_using_window(batch, self.next_state_mem, self.temporal_length)
         dones = self.sample_using_window(batch, self.done_mem, self.temporal_length)
         return states, actions, rewards, next_states, dones
+
