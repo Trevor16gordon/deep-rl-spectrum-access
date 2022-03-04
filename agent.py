@@ -61,7 +61,7 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         DynamicSpectrumAccessAgentBase (_type_): _description_
     """
 
-    def __init__(self, num_bands, gamma=0.9, replace=100, lr=0.0001, temporal_length=6):
+    def __init__(self, num_bands, obvs_space_dim, gamma=0.9, replace=100, lr=0.0001, temporal_length=6):
         self.num_bands = num_bands
         self.n_action_space = num_bands + 1
         self.gamma = gamma
@@ -70,10 +70,10 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         self.epsilon_decay = 1e-3
         self.replace = replace
         self.trainstep = 0
-        self.memory = ExperienceReplay(num_bands, temporal_length)
+        self.memory = ExperienceReplay(obvs_space_dim, temporal_length)
         self.batch_size = 64
-        self.q_net = DDQN(num_bands, temporal_length)
-        self.target_net = DDQN(num_bands, temporal_length)
+        self.q_net = DDQN(num_bands, obvs_space_dim, temporal_length)
+        self.target_net = DDQN(num_bands, obvs_space_dim, temporal_length)
         opt = tf.keras.optimizers.Adam(learning_rate=lr)
         self.q_net.compile(loss='mse', optimizer=opt)
         self.target_net.compile(loss='mse', optimizer=opt)
@@ -94,7 +94,7 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
               action = np.argmax(actions)
 
               if save_visualization_filepath:
-                  
+                  # TODO: Plotting shouldn't be in here
                   filename = f"plots/trainstep_{self.trainstep}_{self.agent_id}.png"
                   plot_and_save_freq_status_and_network_output(state.T, actions.numpy().T, filepath=filename
                   )
@@ -147,39 +147,39 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         self.update_epsilon()
         self.trainstep += 1
 
-class DynamicSpectrumAccessAgent2(DynamicSpectrumAccessAgent1):
-    """Dynamic Spectrum Agent with:
+# class DynamicSpectrumAccessAgent2(DynamicSpectrumAccessAgent1):
+#     """Dynamic Spectrum Agent with:
 
-    Same as DynamicSpectrumAccessAgent1 but include the chosen action and the reward in the network input space
+#     Same as DynamicSpectrumAccessAgent1 but include the chosen action and the reward in the network input space
 
-    Args:
-        DynamicSpectrumAccessAgentBase (_type_): _description_
-    """
-    def __init__(self, num_bands, gamma=0.9, replace=100, lr=0.0001, temporal_length=6):
-        super().__init__(num_bands, gamma, replace, lr, temporal_length)
-        self.last_action = 0
-        self.last_reward = 0
+#     Args:
+#         DynamicSpectrumAccessAgentBase (_type_): _description_
+#     """
+#     def __init__(self, num_bands, gamma=0.9, replace=100, lr=0.0001, temporal_length=6):
+#         super().__init__(num_bands, gamma, replace, lr, temporal_length)
+#         self.last_action = 0
+#         self.last_reward = 0
 
-    def observe_result(self, state, action, reward, next_state, done):
-        """Given information about what happened in environment observe what happened
+#     def observe_result(self, state, action, reward, next_state, done):
+#         """Given information about what happened in environment observe what happened
 
-        Same as DynamicSpectrumAccessAgent1 but include the chosen action and the reward in the network input space
+#         Same as DynamicSpectrumAccessAgent1 but include the chosen action and the reward in the network input space
 
-        Args:
-            state (np.array): Varyiable size array for what an agent considers the state input to be
-            action (np.array): _description_
-            reward np.int32: The reward
-            next_state (np.array): Varyiable size array for what an agent considers the state input to be
-            done (bool): Whether the agent is done.
+#         Args:
+#             state (np.array): Varyiable size array for what an agent considers the state input to be
+#             action (np.array): _description_
+#             reward np.int32: The reward
+#             next_state (np.array): Varyiable size array for what an agent considers the state input to be
+#             done (bool): Whether the agent is done.
 
-        Raises:
-            NotImplementedError: _description_
-        """
-        self.update_mem(state, action, reward, next_state, done)
+#         Raises:
+#             NotImplementedError: _description_
+#         """
+#         self.update_mem(state, action, reward, next_state, done)
 
-        self.last_reward = reward
-        self.last_action = action
-        self.train()
+#         self.last_reward = reward
+#         self.last_action = action
+#         self.train()
 
 class ExperienceReplay():
     
