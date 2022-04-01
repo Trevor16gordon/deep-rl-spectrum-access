@@ -46,6 +46,49 @@ class DynamicSpectrumAccessAgentBase():
         """
         raise NotImplementedError
 
+class DynamicSpectrumAccessAgentPeriodic(DynamicSpectrumAccessAgentBase):
+    """Dumb agent
+
+
+    Transmits for on_period, then idle for off_period
+
+    Args:
+        DynamicSpectrumAccessAgentBase (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    def __init__(self, chosen_band, num_on_periods, num_off_periods) -> None:
+        super().__init__()
+        self.chosen_band = chosen_band
+        self.num_on_periods = num_on_periods
+        self.num_off_periods = num_off_periods
+        self.trainstep = 0
+        #TODO remove beta it's not needed
+        self.beta = 0
+        self.period = self.num_on_periods + self.num_off_periods
+        self.agent_id = 1234
+
+    def act(self, state, save_visualization_filepath=""):
+        """Given the current state give a distribution on actions
+
+        Args:
+            state (np.array): shape is variable
+
+        Returns:
+            np.array: likelihood on selecting action
+        """
+        time = self.trainstep % self.period
+        if time < self.num_off_periods:
+            action = self.chosen_band
+        else:
+            action = 0
+        self.trainstep += 1
+        return action
+
+    def observe_result(self, state, action, reward, next_state, done):
+        return
+
 
 class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
     """Dynamic Spectrum Agent with:
@@ -61,17 +104,18 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         DynamicSpectrumAccessAgentBase (_type_): _description_
     """
 
-    def __init__(self, num_bands, obvs_space_dim, gamma=0.9, replace=100, lr=0.0001, temporal_length=6):
+    def __init__(self, num_bands, obvs_space_dim, gamma=0.9, epsilon=0.02, replace=100, lr=0.0001, temporal_length=6, epsilon_decay=1e-3, buffer_size=1000):
         self.num_bands = num_bands
         self.n_action_space = num_bands + 1
         self.gamma = gamma
-        self.epsilon = 1.0
+        self.epsilon = epsilon
+        self.beta = 1
         self.min_epsilon = 0.01
-        self.epsilon_decay = 1e-3
+        self.epsilon_decay = epsilon_decay
         self.replace = replace
         self.trainstep = 0
-        self.memory = ExperienceReplay(obvs_space_dim, temporal_length)
-        self.batch_size = 64
+        self.memory = ExperienceReplay(obvs_space_dim, temporal_length, buffer_size=buffer_size)
+        self.batch_size = 6
         self.q_net = DDQN(num_bands, obvs_space_dim, temporal_length)
         self.target_net = DDQN(num_bands, obvs_space_dim, temporal_length)
         opt = tf.keras.optimizers.Adam(learning_rate=lr)
@@ -90,13 +134,18 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
             #   temporal_seq = np.concatenate([old_states, [state]], axis=0)
             #   temporal_seq = temporal_seq.reshape((1, self.temporal_length, -1))
             #   actions = self.q_net.advantage(temporal_seq)
-              actions = self.q_net.advantage(state[np.newaxis, :, :])
+              Qs = self.q_net.advantage(state[np.newaxis, :, :])
+
+              # Changing to try and have temp control exploration
+              actions = np.exp(self.beta*Qs) 
+              actions /= np.sum(np.exp(self.beta*Qs))
               action = np.argmax(actions)
 
               if save_visualization_filepath:
                   # TODO: Plotting shouldn't be in here
-                  filename = f"plots/trainstep_{self.trainstep}_{self.agent_id}.png"
-                  plot_and_save_freq_status_and_network_output(state.T, actions.numpy().T, filepath=filename
+                #   filename = f"plots/trainstep_{self.trainstep}_{self.agent_id}.png"
+                  filename = save_visualization_filepath
+                  plot_and_save_freq_status_and_network_output(state.T, actions.T, filepath=filename
                   )
 
               return action
@@ -142,8 +191,12 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         batch_index = np.arange(self.batch_size, dtype=np.int32)
         q_target = np.copy(target)  #optional
 
-        q_target[batch_index, actions] = rewards + self.gamma * next_state_val[batch_index, max_action]*dones
+        # q_target[batch_index, actions] = rewards + self.gamma * next_state_val[batch_index, max_action]*dones
+        
+        # The shapes of actions and everything were messed up so training wasn't occuring properly
+        q_target[batch_index, actions[:, 0]] = rewards[:, 0] + self.gamma * next_state_val[batch_index, max_action]*dones[:, 0]
         self.q_net.train_on_batch(states, q_target)
+
         self.update_epsilon()
         self.trainstep += 1
 

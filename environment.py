@@ -83,6 +83,10 @@ class FrequencySpectrumEnv(gym.Env):
         """
         if self.observation_type == "aggregate":
             observations = self._get_observation_aggregate(agent_actions_history)
+        elif self.observation_type == "aggregate2":
+            observations = self._get_observation_aggregate2(agent_actions_history)
+        elif self.observation_type == "aggregate3":
+            observations = self._get_observation_aggregate3(agent_actions_history)
         elif self.observation_type == "own_actions":
             observations = self._get_observation_own_actions(agent_actions_history)
         else:
@@ -110,9 +114,46 @@ class FrequencySpectrumEnv(gym.Env):
         obvs = np.tile(obvs, (self.num_agents, 1, 1))
         return obvs
 
+    def _get_observation_is_channel_available(self, agent_actions_history):
+        """Channels available if no transmit or collision
+
+        # Channel states: 1 for no transmission, 0 for channel occupied, 1 for collisions
+
+        Args:
+            agent_actions_history (_type_): Complete information about who attempted communication where. Shape is (num_time, num_freq + 1, num_agents)
+        
+        Returns:
+            list(states): state for all agents has shape (num_agents, num_in_time, __)
+        """
+        obvs = agent_actions_history.sum(axis=2).reshape((self.temporal_len, -1))
+        # Results in -1 ACK for collision
+        # obvs[obvs >= 2] = 2
+
+        # For collisions we'll just say channel busy
+        obvs[obvs >= 2] = 1
+
+
+        obvs = obvs[:, 1:]
+        # obvs = 1 - obvs
+        obvs = np.tile(obvs, (self.num_agents, 1, 1))
+        return obvs
+
     def _get_observation_aggregate2(self, agent_actions_history):
         """Like _get_observation_aggregate but agents can't see the state of no_transmit action space"""
-        return
+        obvs1 = self._get_observation_aggregate(agent_actions_history)
+        obvs2 = self._get_observation_own_actions(agent_actions_history)
+        obvs = np.concatenate([obvs1, obvs2], axis=2)
+        return obvs
+
+    def _get_observation_aggregate3(self, agent_actions_history):
+        """Like _get_observation_aggregate but agents can't see the state of no_transmit action space"""
+        obvs1 = self._get_observation_is_channel_available(agent_actions_history)
+        obvs2 = self._get_observation_own_actions(agent_actions_history)
+        
+        # Collisions fail so NACK will be -1 and ACK will be 1. If we didn't transmit, leave at 0
+        obvs2[obvs2 == 2] = -1
+        obvs = np.concatenate([obvs1, obvs2], axis=2)
+        return obvs
 
     def _get_observation_own_actions(self, agent_actions_history):
         """Get the observation for an agent
@@ -131,11 +172,14 @@ class FrequencySpectrumEnv(gym.Env):
         channel_usage[:, 0, 0] = 0
 
         #TODO: Rewards shouldn't be calculated here..
+        # agent_actions_history only has a 1 in each row. So elementwise multiplication picks out successful transmissions or collisions
+        # and then summing along that access just pulls only that element
         rewards = np.sum(agent_actions_history * channel_usage, axis=1)
         rewards = rewards[:, np.newaxis, :]
         obvs = np.concatenate([agent_actions_history, rewards], axis=1)
         obvs = np.swapaxes(obvs, 0, 1)
         obvs = np.swapaxes(obvs, 0, 2)
+        
         return obvs
 
     def agent_actions_to_rewards(self, agent_actions, action_ints):
@@ -148,6 +192,12 @@ class FrequencySpectrumEnv(gym.Env):
             observations = self._get_reward_transmission1(agent_actions, action_ints)
         elif self.reward_type == "collisionpenality1":
             observations = self._get_reward_collisionpenality1(agent_actions, action_ints)
+        elif self.reward_type == "collisionpenality2":
+            observations = self._get_reward_collisionpenality2(agent_actions, action_ints)
+        elif self.reward_type == "centralized":
+            observations = self._get_reward_centralized(agent_actions, action_ints)
+        elif self.reward_type == "transmision_normalized":
+            observations = self._get_reward_transmision_normalized(agent_actions, action_ints)
         else:
             raise KeyError(f"observation type needs to be in [aggregate, ].. got {self.reward_type}")
 
@@ -173,6 +223,50 @@ class FrequencySpectrumEnv(gym.Env):
         reward_n = reward_info[action_ints].reshape(-1)
         return reward_n
 
+    def _get_reward_transmision_normalized(self, agent_actions, action_ints):
+        """Get the reward for an agent.
+
+        Rewards are divided by the number of successful transmissions in the last temporal sequence
+        Intended to make transmissions more valuable to those who haven't gotten them
+        And to make transmissions less valuable to those who have been sending
+
+        Args:
+            agent_actions (_type_): Complete information about who attempted communication where. Shape is (num_freq + 1, num_agents)
+            action_ints (_type_): Int representation of what agents chose Shape is (num_agents)
+        
+        Returns:
+            list(states): rewards for all agents has shape (num_agents, 1)
+        """
+
+        #TODO: This function uses self.agent_actions_history which might not be clear as it isn't normally passed in.
+        channel_usage = self.agent_actions_history.sum(axis=2)
+        channel_usage = channel_usage[:, :, np.newaxis]
+        # Not possible to have collisions in the no transmit state
+        channel_usage[:, 0, 0] = 0
+
+        #TODO: Rewards shouldn't be calculated here..
+        # agent_actions_history only has a 1 in each row. So elementwise multiplication picks out successful transmissions or collisions
+        # and then summing along that access just pulls only that element
+        rewards_history = np.sum(self.agent_actions_history * channel_usage, axis=1)
+        rewards_history = rewards_history[:, np.newaxis, :]
+        successful_trans = (rewards_history == 1).sum(axis=0)
+        collisions = (rewards_history == 2).sum(axis=0)
+
+        successful_trans_norm = successful_trans
+        # Can't divide by zero
+        successful_trans_norm[successful_trans_norm<1] = 1
+        successful_trans_norm = successful_trans_norm.reshape(-1)
+        
+
+        transmissions = agent_actions.sum(axis=1)
+        transmissions[transmissions > 2] = 2
+        reward_info = transmissions.copy()
+        reward_info[reward_info >= 2] = 0
+        reward_info[0] = 0
+        reward_n = reward_info[action_ints].reshape(-1)
+        
+        return reward_n / successful_trans_norm
+
     def _get_reward_collisionpenality1(self, agent_actions, action_ints):
         """Get the reward for an agent.
 
@@ -193,6 +287,51 @@ class FrequencySpectrumEnv(gym.Env):
         reward_info[reward_info >= 2] = -1
         reward_info[0] = 0
         reward_n = reward_info[action_ints].reshape(-1)
+        return reward_n
+
+    def _get_reward_collisionpenality2(self, agent_actions, action_ints):
+        """Get the reward for an agent.
+
+        +2 rewards for a successful transmission
+        0 for no transmission
+        -1 rewards for a collision
+
+        Args:
+            agent_actions (_type_): Complete information about who attempted communication where. Shape is (num_freq + 1, num_agents)
+            action_ints (_type_): Int representation of what agents chose Shape is (num_agents)
+        
+        Returns:
+            list(states): rewards for all agents has shape (num_agents, 1)
+        """
+        transmissions = agent_actions.sum(axis=1)
+        transmissions[transmissions > 2] = 2
+        reward_info = transmissions.copy()
+        reward_info[reward_info >= 2] = -1
+        reward_info[reward_info == 1] = 2
+        reward_info[0] = 0
+        reward_n = reward_info[action_ints].reshape(-1)
+        return reward_n
+
+    def _get_reward_centralized(self, agent_actions, action_ints):
+        """Get the reward for an agent.
+
+        Rewards for all agents
+
+        Args:
+            agent_actions (_type_): Complete information about who attempted communication where. Shape is (num_freq + 1, num_agents)
+            action_ints (_type_): Int representation of what agents chose Shape is (num_agents)
+        
+        Returns:
+            list(states): rewards for all agents has shape (num_agents, 1)
+        """
+        transmissions = agent_actions.sum(axis=1)
+        transmissions[transmissions > 2] = 2
+        reward_info = transmissions.copy()
+        reward_info[reward_info >= 2] = 0
+        reward_info[0] = 0
+        trans_total = reward_info.sum(axis=0)
+        reward_n = reward_info[action_ints].reshape(-1)
+        reward_n[:] = trans_total
         return reward_n
 
     def reset(self):
