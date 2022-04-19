@@ -28,26 +28,29 @@ parser.add_argument("--reward_type", "-r", default="collisionpenality2")
 parser.add_argument("--obs_type", "-o", default="aggregate3")
 parser.add_argument("--agents_shared_memory", "-sm", default=1)
 parser.add_argument("--buffer_size", "-bs", default=1000)
-parser.add_argument("--episode_len", "-el", default=1001)
+parser.add_argument("--episode_len", "-el", default=40001)
+parser.add_argument("--temperature", "-t", default=0.005)
 
 
 all_config = parser.parse_args().__dict__
 
 
-if all_config["obs_type"] == "own_actions":
-    all_config["obvs_space_dim"] = all_config["num_bands"]+2
-elif all_config["obs_type"] == "aggregate":
-    all_config["obvs_space_dim"] = all_config["num_bands"]
-elif all_config["obs_type"] == "aggregate2":
-    all_config["obvs_space_dim"] = 2*all_config["num_bands"]+2
-elif all_config["obs_type"] == "aggregate3":
-    all_config["obvs_space_dim"] = 2*all_config["num_bands"]+2
+num_bands = int(all_config["num_bands"])
+num_agents = int(all_config["num_agents"])
 
-top_level_folder = "plots/"
+if all_config["obs_type"] == "own_actions":
+    all_config["obvs_space_dim"] = num_bands+2
+elif all_config["obs_type"] == "aggregate":
+    all_config["obvs_space_dim"] = num_bands
+elif all_config["obs_type"] == "aggregate2":
+    all_config["obvs_space_dim"] = 2*num_bands+2
+elif all_config["obs_type"] == "aggregate3":
+    all_config["obvs_space_dim"] = 2*num_bands+2
+
+top_level_folder = "plots.nosync/"
 all_config["time_folder"] = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
 path = top_level_folder + all_config["time_folder"]
 os.mkdir(path)
-
 
 # all_config["agent_homogeneity"] = "one_periodic"
 all_config["agent_homogeneity"] = "all_same"
@@ -55,14 +58,15 @@ all_config["agent_homogeneity"] = "all_same"
 pd.DataFrame.from_dict([all_config]).to_csv(path + "/config.csv")
 
 
-env = FrequencySpectrumEnv(all_config["num_bands"], all_config["num_agents"], temporal_len=all_config["temporal_length"], reward_type=all_config["reward_type"], observation_type=all_config["obs_type"])
+env = FrequencySpectrumEnv(num_bands, num_agents, temporal_len=int(all_config["temporal_length"]), reward_type=all_config["reward_type"], observation_type=all_config["obs_type"])
 
-agents = [DynamicSpectrumAccessAgent1(all_config["num_bands"],
+agents = [DynamicSpectrumAccessAgent1(num_bands,
                                         all_config["obvs_space_dim"], 
-                                        temporal_length=all_config["temporal_length"], 
+                                        temporal_length=int(all_config["temporal_length"]), 
                                         epsilon=float(all_config["epsilon"]),
+                                        temperature=float(all_config["temperature"]),
                                         buffer_size=int(all_config["buffer_size"]),
-                                         epsilon_decay=float(all_config["eps_decay"])) for _ in range(all_config["num_agents"])]
+                                         epsilon_decay=float(all_config["eps_decay"])) for _ in range(num_agents)]
 # agents = [DynamicSpectrumAccessAgent1(num_bands, temporal_length=temporal_length) for _ in range(num_agents)]
 
 if all_config["agent_homogeneity"] == "one_periodic":
@@ -76,51 +80,54 @@ if all_config["agents_shared_memory"]:
 all_collisions = []
 all_throughputs = []
 
-plot_every = 25
-for s in range(int(all_config["episode_len"])):
-    # print(f"s is {s}")
-    done = False
-    state = env.reset()
-    total_reward = 0
+plot_every = 500
+plot_every_smaller = 5000
+state = env.reset()
 
-    should_plot = (s % plot_every) == 0
-    # should_plot = False
+# print(f"s is {s}")
+done = False
+env.iter = 1
+total_reward = 0
+
+
+counter = 0
+while True:
+    counter += 1
+
+    if counter > int(all_config["episode_len"]):
+        print("Breaking because episode is done")
+        break
+
+    should_plot_smaller = 0 <= (counter % plot_every_smaller) <= 500
     
-    counter = 0
-    while not done:
-        counter += 1
-      #env.render()
-      # try:
-        if should_plot:
-            # filename = f"{path}/trainstep_{agents[i].trainstep}_{agents[i].agent_id}.png"
-            actions = [agents[i].act(state[i], save_visualization_filepath=f"{path}/trainstep_{agents[i].trainstep}_{agents[i].agent_id}.png")
-             for i in range(all_config["num_agents"])]
-        else:
-            actions = [agents[i].act(state[i]) for i in range(all_config["num_agents"])]
-        next_state, rewards, done_i, info = env.step(actions)
-        # pdb.set_trace()
+    if should_plot_smaller:
+        # filename = f"{path}/trainstep_{agents[i].trainstep}_{agents[i].agent_id}.png"
+        actions = [agents[i].act(state[i], save_visualization_filepath=f"{path}/trainstep_{agents[i].trainstep}_{agents[i].agent_id}.png")
+            for i in range(num_agents)]
+    else:
+        actions = [agents[i].act(state[i]) for i in range(num_agents)]
+    next_state, rewards, done_i, info = env.step(actions)
 
-          
-        done = done_i[0]
-        for i in range(all_config["num_agents"]):
-          # state, action, reward, next_state, done
-          agents[i].observe_result(state[i], actions[i], rewards[i], next_state[i], done_i[i])
-          
-          state = next_state
-          total_reward += sum(rewards)
 
-        if done:
-          print(f"total reward after {s} episode is {total_reward} throughput is {env.throughput:.2f} num_collisions is {env.num_collisions} and epsilon is {agents[0].epsilon:.2f}")
-          all_collisions.append(env.num_collisions)
-          all_throughputs.append(env.throughput)
-    
+    for i in range(num_agents):
+        agents[i].observe_result(state[i], actions[i], rewards[i], next_state[i], done_i[i])
+        
+    state = next_state
+    total_reward += sum(rewards)
+
+    should_plot = (counter % plot_every) == 0
+
     if should_plot:
+        print(f"total reward after {counter} episode is {total_reward} throughput is {env.throughput:.2f} num_collisions is {env.num_collisions} and epsilon is {agents[0].epsilon:.2f}")
+        all_collisions.append(env.num_collisions)
+        all_throughputs.append(env.throughput)
+
         agent_actions = np.array(env.agent_actions_complete_history)
         df_more_info = agent_actions_to_information_table(agent_actions, reward_type=all_config["reward_type"])
-        filename = f"{path}/extra_info_trainstep_{s}.png"
+        filename = f"{path}/extra_info_trainstep_{counter}.png"
         fig= plot_spectrum_usage_over_time(df_more_info, add_collisions=True, filepath=filename)
 
-    if (s % 2) == 0:
+    if (counter % 2) == 0:
         for agent_i in agents:
             # TODO this isn't well defined 
             agent_i.beta -= 0.001
