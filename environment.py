@@ -9,10 +9,11 @@ class FrequencySpectrumEnv(gym.Env):
     def __init__(self,
                  num_freq_bands,
                  num_agents,
-                 max_iterations=20,
+                 max_iterations=10000,
                  temporal_len=3,
                  observation_type="aggregate",
-                 reward_type="transmission1"):
+                 reward_type="transmission1",
+                 reward_history_len=100):
         super().__init__()
         self.num_actions = num_freq_bands + 1
         self.num_freq_bands = num_freq_bands
@@ -27,6 +28,9 @@ class FrequencySpectrumEnv(gym.Env):
         self.observation_type = observation_type
         self.reward_type = reward_type
         self.agent_actions_complete_history = []
+        self.reward_history_len = reward_history_len
+        self.reward_hist = np.zeros((self.reward_history_len, self.num_agents))
+        self.reward_hist_pointer = 0
 
     def step(self, action_n, verbose=False):
         
@@ -51,9 +55,20 @@ class FrequencySpectrumEnv(gym.Env):
 
         obs_n = self.agent_actions_history_to_observations(self.agent_actions_history)
 
+        
+
         # Keep track of collisions and throughput
         transmissions = self.agent_actions.sum(axis=1)
         transmissions[transmissions > 2] = 2
+
+        # Start keeping track of rewards / collisions for purpose of modifying rewards
+        agent_status = np.copy(transmissions)
+        agent_status[0] = 0
+        self.reward_hist[self.reward_hist_pointer, :] = agent_status[action_n]
+        self.reward_hist_pointer += 1
+        self.reward_hist_pointer = (self.reward_hist_pointer % self.reward_history_len)
+        # End section
+
         self.num_collisions += np.count_nonzero(transmissions[1:] == 2)
         throughput_this_time_splot = np.count_nonzero(transmissions[1:] == 1)/ self.num_freq_bands
         new_throughput = (self.throughput*(self.iter - 1) + throughput_this_time_splot)/self.iter
@@ -151,7 +166,7 @@ class FrequencySpectrumEnv(gym.Env):
         obvs2 = self._get_observation_own_actions(agent_actions_history)
         
         # Collisions fail so NACK will be -1 and ACK will be 1. If we didn't transmit, leave at 0
-        obvs2[obvs2 == 2] = -1
+        obvs2[obvs2 >= 2] = -1
         obvs = np.concatenate([obvs1, obvs2], axis=2)
         return obvs
 
@@ -238,34 +253,54 @@ class FrequencySpectrumEnv(gym.Env):
             list(states): rewards for all agents has shape (num_agents, 1)
         """
 
-        #TODO: This function uses self.agent_actions_history which might not be clear as it isn't normally passed in.
-        channel_usage = self.agent_actions_history.sum(axis=2)
-        channel_usage = channel_usage[:, :, np.newaxis]
-        # Not possible to have collisions in the no transmit state
-        channel_usage[:, 0, 0] = 0
+        # #TODO: This function uses self.agent_actions_history which might not be clear as it isn't normally passed in.
+        # channel_usage = self.agent_actions_history.sum(axis=2)
+        # channel_usage = channel_usage[:, :, np.newaxis]
+        # # Not possible to have collisions in the no transmit state
+        # channel_usage[:, 0, 0] = 0
 
-        #TODO: Rewards shouldn't be calculated here..
-        # agent_actions_history only has a 1 in each row. So elementwise multiplication picks out successful transmissions or collisions
-        # and then summing along that access just pulls only that element
-        rewards_history = np.sum(self.agent_actions_history * channel_usage, axis=1)
-        rewards_history = rewards_history[:, np.newaxis, :]
-        successful_trans = (rewards_history == 1).sum(axis=0)
-        collisions = (rewards_history == 2).sum(axis=0)
+        # #TODO: Rewards shouldn't be calculated here..
+        # # agent_actions_history only has a 1 in each row. So elementwise multiplication picks out successful transmissions or collisions
+        # # and then summing along that access just pulls only that element
+        # rewards_history = np.sum(self.agent_actions_history * channel_usage, axis=1)
+        # rewards_history = rewards_history[:, np.newaxis, :]
+        # successful_trans = (rewards_history == 1).sum(axis=0)
+        # collisions = (rewards_history == 2).sum(axis=0)
 
-        successful_trans_norm = successful_trans
-        # Can't divide by zero
-        successful_trans_norm[successful_trans_norm<1] = 1
-        successful_trans_norm = successful_trans_norm.reshape(-1)
+        # successful_trans_norm = successful_trans
+        # # Can't divide by zero
+        # successful_trans_norm[successful_trans_norm<1] = 1
+        # successful_trans_norm = successful_trans_norm.reshape(-1)
         
 
         transmissions = agent_actions.sum(axis=1)
         transmissions[transmissions > 2] = 2
         reward_info = transmissions.copy()
-        reward_info[reward_info >= 2] = 0
+        reward_info[reward_info >= 2] = -1
+        reward_info[reward_info == 1] = 2
         reward_info[0] = 0
         reward_n = reward_info[action_ints].reshape(-1)
-        
-        return reward_n / successful_trans_norm
+
+
+        successes = (self.reward_hist == 1).sum(axis=0)
+        collisions = (self.reward_hist == 2).sum(axis=0)
+        no_trans = (self.reward_hist == 0).sum(axis=0)
+
+        # Rewards are multiplied number of (no transmits / 100)
+        # Rewards are divided by number of (sucesses / 100)
+
+        reward_n = reward_n.astype(np.float32)
+        # Positive reward modification
+        pos_mul = (no_trans / self.reward_history_len) / (1 + (successes / self.reward_history_len))
+        neg_mul = (successes / self.reward_history_len) / (1 + (no_trans / self.reward_history_len))
+
+        # Pull values from pos or neg multiplier based on if reward is pos or neg
+        indexer = np.arange(self.num_agents),(reward_n < 0).astype(np.int)
+        multiplier = np.concatenate([pos_mul.reshape((-1, 1)), neg_mul.reshape((-1, 1))], axis=1)[indexer]
+        reward_n *= multiplier
+
+
+        return reward_n
 
     def _get_reward_collisionpenality1(self, agent_actions, action_ints):
         """Get the reward for an agent.
