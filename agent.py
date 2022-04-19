@@ -104,7 +104,7 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         DynamicSpectrumAccessAgentBase (_type_): _description_
     """
 
-    def __init__(self, num_bands, obvs_space_dim, gamma=0.9, epsilon=0.02, replace=100, lr=0.0001, temporal_length=6, epsilon_decay=1e-3, buffer_size=1000):
+    def __init__(self, num_bands, obvs_space_dim, gamma=0.9, epsilon=0.02, replace=100, temperature=0.005, lr=0.0001, temporal_length=6, epsilon_decay=1e-3, buffer_size=1000):
         self.num_bands = num_bands
         self.n_action_space = num_bands + 1
         self.gamma = gamma
@@ -125,30 +125,62 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         self.agent_id = [str(x) for x in np.random.randint(0, high=9, size=10).tolist()]
         self.agent_id = "".join(self.agent_id)
 
+        # High temps cause all actions to be equally probable
+        self.temperature = temperature
+
     def act(self, state, save_visualization_filepath=False):
+
           
-          if np.random.rand() <= self.epsilon:
-              return np.random.choice([i for i in range(self.n_action_space)])
-          else:
-            #   old_states = self.memory.get_last_several_states(self.temporal_length-1)
-            #   temporal_seq = np.concatenate([old_states, [state]], axis=0)
-            #   temporal_seq = temporal_seq.reshape((1, self.temporal_length, -1))
-            #   actions = self.q_net.advantage(temporal_seq)
-              Qs = self.q_net.advantage(state[np.newaxis, :, :])
+        if np.random.rand() <= self.epsilon:
+            return np.random.choice([i for i in range(self.n_action_space)])
+        else:
 
-              # Changing to try and have temp control exploration
-              actions = np.exp(self.beta*Qs) 
-              actions /= np.sum(np.exp(self.beta*Qs))
-              action = np.argmax(actions)
+            Qs = self.q_net.advantage(state[np.newaxis, :, :])
 
-              if save_visualization_filepath:
-                  # TODO: Plotting shouldn't be in here
-                #   filename = f"plots/trainstep_{self.trainstep}_{self.agent_id}.png"
-                  filename = save_visualization_filepath
-                  plot_and_save_freq_status_and_network_output(state.T, actions.T, filepath=filename
-                  )
+            # Set the minimum value to be 0 so that after exp the minimum is 1
+            Qs_norm = Qs - np.min(Qs)
 
-              return action
+            # Changing to try and have temp control exploration
+            actions = np.exp(Qs_norm/self.temperature)
+
+            # Sometimes large actions can end up as + inf here.
+            # In this case just take the argmax
+            if  np.any(np.isinf(actions)) or np.isinf(np.sum(actions)):
+                actions = np.zeros(len(Qs[0]))
+                actions[np.argmax(Qs)] = 1
+
+            prob = (actions / np.sum(actions)).reshape(-1)
+            try:
+                action = np.random.choice(np.arange(len(prob)), p=prob)
+            except:
+                pdb.set_trace()
+                print("whatttt")
+
+
+        #   if np.any(np.isinf(actions)) or (np.sum(actions) == 0):
+        #       action = np.argmax(Qs)
+        #   else:
+        #     actions /= np.sum(actions)
+        #     if np.sum(actions) == 0:
+        #         action = np.argmax(Qs)
+        #     else:
+        #         actions = np.nan_to_num(actions, nan=1)
+        #         prob = actions.reshape(-1)
+        #         try:
+        #             action = np.random.choice(np.arange(len(prob)), p=prob)
+        #         except:
+        #             print("whaaat")
+        #             action = np.argmax(Qs)           
+            
+
+            if save_visualization_filepath:
+                # TODO: Plotting shouldn't be in here
+            #   filename = f"plots/trainstep_{self.trainstep}_{self.agent_id}.png"
+                filename = save_visualization_filepath
+                plot_and_save_freq_status_and_network_output(state.T, prob.T, filepath=filename
+                )
+
+            return action
 
     def observe_result(self, state, action, reward, next_state, done):
         """Given information about what happened in environment observe what happened
