@@ -27,10 +27,12 @@ class FrequencySpectrumEnv(gym.Env):
             (self.temporal_len, self.num_actions, self.num_agents), dtype=np.int32)
         self.observation_type = observation_type
         self.reward_type = reward_type
-        self.agent_actions_complete_history = []
+        
         self.reward_history_len = reward_history_len
         self.reward_hist = np.zeros((self.reward_history_len, self.num_agents))
         self.reward_hist_pointer = 0
+
+        self.agent_actions_complete_history = []
 
     def step(self, action_n, verbose=False):
         

@@ -9,6 +9,7 @@ from environment import FrequencySpectrumEnv
 from agent import DynamicSpectrumAccessAgent1, DynamicSpectrumAccessAgentPeriodic#, DynamicSpectrumAccessAgent2
 from utils import  agent_actions_to_information_table
 from visualization import plot_spectrum_usage_over_time
+from utils import create_stacked_csv, complete_df_to_stacked, create_stacked_csv_old
 import argparse
 
 # Disable all GPUS
@@ -80,7 +81,7 @@ if all_config["agents_shared_memory"]:
 all_collisions = []
 all_throughputs = []
 
-plot_every = 500
+plot_every = 10
 plot_every_smaller = 5000
 state = env.reset()
 
@@ -91,6 +92,10 @@ total_reward = 0
 
 
 counter = 0
+
+agent_values = []
+agent_action_prob = []
+
 while True:
     counter += 1
 
@@ -106,8 +111,11 @@ while True:
             for i in range(num_agents)]
     else:
         actions = [agents[i].act(state[i]) for i in range(num_agents)]
-    next_state, rewards, done_i, info = env.step(actions)
 
+    agent_values.append([agents[i].last_value_function for i in range(num_agents)])
+    agent_action_prob.append([agents[i].last_prob_value for i in range(num_agents)])
+
+    next_state, rewards, done_i, info = env.step(actions)
 
     for i in range(num_agents):
         agents[i].observe_result(state[i], actions[i], rewards[i], next_state[i], done_i[i])
@@ -126,6 +134,19 @@ while True:
         df_more_info = agent_actions_to_information_table(agent_actions, reward_type=all_config["reward_type"])
         filename = f"{path}/extra_info_trainstep_{counter}.png"
         fig= plot_spectrum_usage_over_time(df_more_info, add_collisions=True, filepath=filename)
+
+        df = create_stacked_csv(agent_actions, agent_values, agent_action_prob)
+        
+
+        merged= pd.merge(df_more_info, df, on="time")
+
+        history = create_stacked_csv_old(agent_actions, agent_values, agent_action_prob)
+
+        merged.to_csv(f"{path}/history.csv")
+
+        history.to_csv(f"{path}/history2.csv")
+
+    
 
     if (counter % 2) == 0:
         for agent_i in agents:

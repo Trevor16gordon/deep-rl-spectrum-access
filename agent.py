@@ -127,15 +127,24 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
 
         # High temps cause all actions to be equally probable
         self.temperature = temperature
+        
+        # Last value function should be the same shape as number of bands + 1
+        self.last_value_function = np.zeros(self.num_bands+1)
+
+        # Las prob value will be the softmax temperature resulting action probabilities
+        self.last_prob_value = np.zeros(self.num_bands+1)
 
     def act(self, state, save_visualization_filepath=False):
 
           
         if np.random.rand() <= self.epsilon:
+            self.last_value_function = np.ones(self.num_bands+1)/(self.num_bands+1)
+            self.last_prob_value = np.ones(self.num_bands+1)/(self.num_bands+1)
             return np.random.choice([i for i in range(self.n_action_space)])
         else:
 
             Qs = self.q_net.advantage(state[np.newaxis, :, :])
+            self.last_value_function = Qs.numpy()[0].tolist()
 
             # Set the minimum value to be 0 so that after exp the minimum is 1
             Qs_norm = Qs - np.min(Qs)
@@ -150,6 +159,8 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
                 actions[np.argmax(Qs)] = 1
 
             prob = (actions / np.sum(actions)).reshape(-1)
+            self.last_prob_value = prob.tolist()
+
             try:
                 action = np.random.choice(np.arange(len(prob)), p=prob)
             except:
