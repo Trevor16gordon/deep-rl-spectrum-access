@@ -15,7 +15,7 @@ def agent_actions_to_information_table(agent_actions, num_bands=None, reward_typ
         agent_actions (np.array): Expects agent actions to have columns for each agent. Int for which freq was selected
         optional num_bands (int): If not pass, the max value in agent_actions denotes this
     """
-
+    
     num_time, num_agents = agent_actions.shape
     num_bands = agent_actions.max()
 

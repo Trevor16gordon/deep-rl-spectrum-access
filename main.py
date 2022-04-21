@@ -68,7 +68,6 @@ agents = [DynamicSpectrumAccessAgent1(num_bands,
                                         temperature=float(all_config["temperature"]),
                                         buffer_size=int(all_config["buffer_size"]),
                                          epsilon_decay=float(all_config["eps_decay"])) for _ in range(num_agents)]
-# agents = [DynamicSpectrumAccessAgent1(num_bands, temporal_length=temporal_length) for _ in range(num_agents)]
 
 if all_config["agent_homogeneity"] == "one_periodic":
     agents[-1] = DynamicSpectrumAccessAgentPeriodic(1, 1, 1)
@@ -78,21 +77,14 @@ if all_config["agents_shared_memory"]:
     for agent_i in agents[1:]:
         agent_i.memory = agents[0].memory
 
-all_collisions = []
-all_throughputs = []
+save_checkpoint_csv_every = 500
+info_every = 10
 
-plot_every = 10
-plot_every_smaller = 5000
 state = env.reset()
 
-# print(f"s is {s}")
-done = False
-env.iter = 1
+
 total_reward = 0
-
-
 counter = 0
-
 agent_values = []
 agent_action_prob = []
 
@@ -103,15 +95,9 @@ while True:
         print("Breaking because episode is done")
         break
 
-    should_plot_smaller = 0 <= (counter % plot_every_smaller) <= 500
-    
-    if should_plot_smaller:
-        # filename = f"{path}/trainstep_{agents[i].trainstep}_{agents[i].agent_id}.png"
-        actions = [agents[i].act(state[i], save_visualization_filepath=f"{path}/trainstep_{agents[i].trainstep}_{agents[i].agent_id}.png")
-            for i in range(num_agents)]
-    else:
-        actions = [agents[i].act(state[i]) for i in range(num_agents)]
+    actions = [agents[i].act(state[i]) for i in range(num_agents)]
 
+    # Collect agent value neural networks and resulting probabilities for analysis
     agent_values.append([agents[i].last_value_function for i in range(num_agents)])
     agent_action_prob.append([agents[i].last_prob_value for i in range(num_agents)])
 
@@ -123,35 +109,12 @@ while True:
     state = next_state
     total_reward += sum(rewards)
 
-    should_plot = (counter % plot_every) == 0
-
-    if should_plot:
+    if (counter % info_every) == 0:
         print(f"total reward after {counter} episode is {total_reward} throughput is {env.throughput:.2f} num_collisions is {env.num_collisions} and epsilon is {agents[0].epsilon:.2f}")
-        all_collisions.append(env.num_collisions)
-        all_throughputs.append(env.throughput)
-
+    
+    if (counter % save_checkpoint_csv_every) == 0:
         agent_actions = np.array(env.agent_actions_complete_history)
         df_more_info = agent_actions_to_information_table(agent_actions, reward_type=all_config["reward_type"])
-        filename = f"{path}/extra_info_trainstep_{counter}.png"
-        fig= plot_spectrum_usage_over_time(df_more_info, add_collisions=True, filepath=filename)
-
         df = create_stacked_csv(agent_actions, agent_values, agent_action_prob)
-        
-
         merged= pd.merge(df_more_info, df, on="time")
-
-        history = create_stacked_csv_old(agent_actions, agent_values, agent_action_prob)
-
         merged.to_csv(f"{path}/history.csv")
-
-        history.to_csv(f"{path}/history2.csv")
-
-    
-
-    if (counter % 2) == 0:
-        for agent_i in agents:
-            # TODO this isn't well defined 
-            agent_i.beta -= 0.001
-          
-df = pd.DataFrame.from_dict({"collisions":all_collisions, "throughout": all_throughputs})
-df.to_csv("output.csv")
