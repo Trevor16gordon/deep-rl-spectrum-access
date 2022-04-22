@@ -32,24 +32,37 @@ class FrequencySpectrumEnv(gym.Env):
         self.reward_hist = np.zeros((self.reward_history_len, self.num_agents))
         self.reward_hist_pointer = 0
 
+        # this is used by the main function to pull history about what happened and save it
         self.agent_actions_complete_history = []
 
     def step(self, action_n, verbose=False):
+        """Step in environment
+
+        This function generally
+        - Takes in the action integers and figures out where collisions occur
+        - Collisions occur when agents select the same integer except 0 as 0 is no transmit
+        - Gives each agent back an obvservation. See self.agent_actions_history_to_observations() for possibilities
+        - Gives each agent back a reward. See self.agent_actions_to_rewards() for possibilities
+
+        Args:
+            action_n (np.array): List of ints representing the chosen actions for each agent
+            verbose (bool, optional): . Defaults to False.
+
+        Returns:
+            _type_: _description_
+        """
         
         obs_n = []
         reward_n = []
         done_n = []
-        info_n = {'n': []}
+        info_n = {"n": []}
         
         self.agent_actions = np.zeros((self.num_actions, self.num_agents), dtype=np.int32)
         self.agent_actions[action_n, np.arange(self.num_agents)] = 1
-        
-
         self.agent_actions_complete_history.append(action_n)
 
-        # for i, a in enumerate(action_n):
-        #     self.agent_actions[a, i] = 1
-
+        # This a look of temporal_length into the past
+        # Observation types will start with this and convert this into a formatted observation
         self.agent_actions_history = np.concatenate([
             self.agent_actions.reshape((1, self.num_actions, self.num_agents)),
             self.agent_actions_history[:-1, :, :]],
@@ -57,9 +70,8 @@ class FrequencySpectrumEnv(gym.Env):
 
         obs_n = self.agent_actions_history_to_observations(self.agent_actions_history)
 
-        
-
         # Keep track of collisions and throughput
+        # SUM - to get collections on most recent
         transmissions = self.agent_actions.sum(axis=1)
         transmissions[transmissions > 2] = 2
 
@@ -77,7 +89,7 @@ class FrequencySpectrumEnv(gym.Env):
 
         if verbose:
             print(f"self.throughout old is {self.throughput:.2f} this timeslot "
-            "{throughput_this_time_splot:.2f} new_throughput {new_throughput:.2f}")
+            f"{throughput_this_time_splot:.2f} new_throughput {new_throughput:.2f}")
         
         self.throughput = new_throughput
 
@@ -87,7 +99,7 @@ class FrequencySpectrumEnv(gym.Env):
         if self.iter < self.max_iterations:
             done_n = [0 for _ in range(self.num_agents)]
             self.iter += 1
-        else:   
+        else:
             done_n = [1 for _ in range(self.num_agents)]
 
         return obs_n, reward_n, done_n, info_n
@@ -125,6 +137,7 @@ class FrequencySpectrumEnv(gym.Env):
         Returns:
             list(states): state for all agents has shape (num_agents, num_in_time, __)
         """
+        # SUM - to get collisions on temporal amount
         obvs = agent_actions_history.sum(axis=2).reshape((self.temporal_len, -1))
         obvs[obvs > 2] = 2
         obvs = obvs[:, 1:]
@@ -142,6 +155,7 @@ class FrequencySpectrumEnv(gym.Env):
         Returns:
             list(states): state for all agents has shape (num_agents, num_in_time, __)
         """
+        # SUM - to get collisions on temporal amount
         obvs = agent_actions_history.sum(axis=2).reshape((self.temporal_len, -1))
         # Results in -1 ACK for collision
         # obvs[obvs >= 2] = 2
@@ -177,6 +191,13 @@ class FrequencySpectrumEnv(gym.Env):
 
         Each agent only knows it's own chosen action and whether it got a reward
 
+        this state is returned as 
+        0: No transmit
+        1: success
+        2: collision
+
+        Other functions call this function but replace 2 with -1 so the NN can learn easier
+
         Args:
             agent_actions_history (_type_): Complete information about who attempted communication where. Shape is (num_time, num_freq + 1, num_agents)
         
@@ -188,9 +209,11 @@ class FrequencySpectrumEnv(gym.Env):
         # Not possible to have collisions in the no transmit state
         channel_usage[:, 0, 0] = 0
 
+
         #TODO: Rewards shouldn't be calculated here..
         # agent_actions_history only has a 1 in each row. So elementwise multiplication picks out successful transmissions or collisions
         # and then summing along that access just pulls only that element
+        # SUM - to get collisions on temporal amount then pick out specifics for agent
         rewards = np.sum(agent_actions_history * channel_usage, axis=1)
         rewards = rewards[:, np.newaxis, :]
         obvs = np.concatenate([agent_actions_history, rewards], axis=1)
@@ -224,6 +247,7 @@ class FrequencySpectrumEnv(gym.Env):
         """Get the reward for an agent.
 
         Positive 1 rewards for a successful transmission
+        Choosing 0 action (no transmit) can't result in a reward
 
         Args:
             agent_actions (_type_): Complete information about who attempted communication where. Shape is (num_freq + 1, num_agents)
@@ -232,6 +256,7 @@ class FrequencySpectrumEnv(gym.Env):
         Returns:
             list(states): rewards for all agents has shape (num_agents, 1)
         """
+        # SUM - to get collisions on most recent
         transmissions = agent_actions.sum(axis=1)
         transmissions[transmissions > 2] = 2
         reward_info = transmissions.copy()
@@ -243,9 +268,17 @@ class FrequencySpectrumEnv(gym.Env):
     def _get_reward_transmision_normalized(self, agent_actions, action_ints):
         """Get the reward for an agent.
 
-        Rewards are divided by the number of successful transmissions in the last temporal sequence
+        Original rewards taken from _get_reward_collisionpenality2()
+
+        Then:
+
+        Rewards are divided by the number of successful transmissions in the reward_hist buffer
         Intended to make transmissions more valuable to those who haven't gotten them
         And to make transmissions less valuable to those who have been sending
+
+        Collisions are divided by the number of no transmits in the reward_hist buffer
+        Intended to make collisions less costly to those who haven't been transmitting
+        And to make collisions more costly to those who have been successful
 
         Args:
             agent_actions (_type_): Complete information about who attempted communication where. Shape is (num_freq + 1, num_agents)
@@ -255,43 +288,13 @@ class FrequencySpectrumEnv(gym.Env):
             list(states): rewards for all agents has shape (num_agents, 1)
         """
 
-        # #TODO: This function uses self.agent_actions_history which might not be clear as it isn't normally passed in.
-        # channel_usage = self.agent_actions_history.sum(axis=2)
-        # channel_usage = channel_usage[:, :, np.newaxis]
-        # # Not possible to have collisions in the no transmit state
-        # channel_usage[:, 0, 0] = 0
-
-        # #TODO: Rewards shouldn't be calculated here..
-        # # agent_actions_history only has a 1 in each row. So elementwise multiplication picks out successful transmissions or collisions
-        # # and then summing along that access just pulls only that element
-        # rewards_history = np.sum(self.agent_actions_history * channel_usage, axis=1)
-        # rewards_history = rewards_history[:, np.newaxis, :]
-        # successful_trans = (rewards_history == 1).sum(axis=0)
-        # collisions = (rewards_history == 2).sum(axis=0)
-
-        # successful_trans_norm = successful_trans
-        # # Can't divide by zero
-        # successful_trans_norm[successful_trans_norm<1] = 1
-        # successful_trans_norm = successful_trans_norm.reshape(-1)
-        
-
-        transmissions = agent_actions.sum(axis=1)
-        transmissions[transmissions > 2] = 2
-        reward_info = transmissions.copy()
-        reward_info[reward_info >= 2] = -1
-        reward_info[reward_info == 1] = 2
-        reward_info[0] = 0
-        reward_n = reward_info[action_ints].reshape(-1)
-
+        reward_n = self._get_reward_collisionpenality2(agent_actions=agent_actions, action_ints=action_ints)
+        reward_n = reward_n.astype(np.float32)
 
         successes = (self.reward_hist == 1).sum(axis=0)
         collisions = (self.reward_hist == 2).sum(axis=0)
         no_trans = (self.reward_hist == 0).sum(axis=0)
 
-        # Rewards are multiplied number of (no transmits / 100)
-        # Rewards are divided by number of (sucesses / 100)
-
-        reward_n = reward_n.astype(np.float32)
         # Positive reward modification
         pos_mul = (no_trans / self.reward_history_len) / (1 + (successes / self.reward_history_len))
         neg_mul = (successes / self.reward_history_len) / (1 + (no_trans / self.reward_history_len))
@@ -300,8 +303,6 @@ class FrequencySpectrumEnv(gym.Env):
         indexer = np.arange(self.num_agents),(reward_n < 0).astype(np.int)
         multiplier = np.concatenate([pos_mul.reshape((-1, 1)), neg_mul.reshape((-1, 1))], axis=1)[indexer]
         reward_n *= multiplier
-
-
         return reward_n
 
     def _get_reward_collisionpenality1(self, agent_actions, action_ints):
@@ -343,8 +344,17 @@ class FrequencySpectrumEnv(gym.Env):
         transmissions = agent_actions.sum(axis=1)
         transmissions[transmissions > 2] = 2
         reward_info = transmissions.copy()
+        # reward_info[reward_info >= 2] = -1
+        # reward_info[reward_info == 1] = 2
+
+        # # Changing to make collisions a higher penalty
+        # reward_info[reward_info >= 2] = -2
+        # reward_info[reward_info == 1] = 1
+
+        # Changing to make collisions a higher reward
         reward_info[reward_info >= 2] = -1
-        reward_info[reward_info == 1] = 2
+        reward_info[reward_info == 1] = 3
+
         reward_info[0] = 0
         reward_n = reward_info[action_ints].reshape(-1)
         return reward_n
@@ -352,7 +362,7 @@ class FrequencySpectrumEnv(gym.Env):
     def _get_reward_centralized(self, agent_actions, action_ints):
         """Get the reward for an agent.
 
-        Rewards for all agents
+        Agents get the sum of all agent rewards
 
         Args:
             agent_actions (_type_): Complete information about who attempted communication where. Shape is (num_freq + 1, num_agents)
@@ -378,12 +388,7 @@ class FrequencySpectrumEnv(gym.Env):
         obs_n = self.agent_actions_history_to_observations(self.agent_actions_history)
         return obs_n
 
-    def render(self, mode='human', close=False):
-        print("rendering")
-
-
-# TODO: Abstract out different types of rewards and different types of observations
-
-
-
-# TODO: Add ability to save image after some steps showing what agents chose
+    def render(self, mode="human", close=False):
+        """Not currently supported
+        """
+        print("rendering but not really :(")
