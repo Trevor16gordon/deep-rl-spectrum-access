@@ -21,9 +21,12 @@ if __name__ == '__main__':
                         help="Number of timesteps visible on x axis at a time", type=int)
     parser.add_argument("--port", "-po", default=8051,
                         help="Number of timesteps visible on x axis at a time", type=int)
+    parser.add_argument("--width", "-w", default=1000,
+                        help="Width of the plot", type=int)
+    parser.add_argument("--height", "-he", default=800,
+                        help="Height of the plot", type=int)
     args = parser.parse_args()
     merged = pd.read_csv(args.path)
-
 
     agent_name_cols = [col for col in merged.columns if ("agent" in col) and (len(col) == 7)]
     agent_name_cols = sorted(agent_name_cols, key=lambda x: int(x.replace("agent_", "")))
@@ -97,7 +100,7 @@ if __name__ == '__main__':
         
 
         # filtered_merged["agent_0"].values.reshape((-1, 1)), filtered_merged[agent_name_cols].values.shape
-        chosen_action_colors = np.repeat(freq_status, 3, axis=1).T
+        chosen_action_colors = np.repeat(freq_status, num_actions, axis=1).T
         chosen_action *= chosen_action_colors
         fig.add_trace(go.Heatmap(z=chosen_action, colorscale=["#F8F8F8", "#E6E6E6", "#77DD76", "#ff6962"], zmin=0, zmax=3, y=y_names, x=x_names), col=1, row=2)
         fig.add_trace(go.Heatmap(z=values, colorscale="Blues",
@@ -148,7 +151,7 @@ if __name__ == '__main__':
         fig.update_layout(
             plot_bgcolor='rgb(250,250,250)',
             title="RL Frequency Spectrum Sharing Agent Results",
-            width=1000, height=800
+            width=args.width, height=args.height
         )
         fig['layout']['yaxis1']['title'] = "Cumulative Reward Per Agent"
         fig['layout']['yaxis2']['title'] = "Channel Utilization"

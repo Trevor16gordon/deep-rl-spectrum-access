@@ -220,28 +220,42 @@ def complete_df_to_stacked(merged):
 
     stacked_agents = pd.concat(sub_dfs)
 
+
     id_cols = [x for x in stacked_agents.columns if ("value" not in x) and ("prob" not in x)]
-    val_cols = [x for x in stacked_agents.columns if ("value" in x) or ("prob" in x)]
+    val_cols1 = [x for x in stacked_agents.columns if ("value" in x)]
+    val_cols2 = [x for x in stacked_agents.columns if ("prob" in x)]
 
-    stacked_actions = pd.melt(stacked_agents, id_vars=id_cols, value_vars=val_cols)
-    stacked_actions["value_or_prob"] = stacked_actions["variable"].apply(lambda x: x.split("_")[0])
-    stacked_actions["action"] = stacked_actions["variable"].apply(lambda x: x.split("_")[-1])
-    stacked_actions["action"] = stacked_actions["action"].astype(int)
+    stacked_actions1 = pd.melt(stacked_agents, id_vars=id_cols, value_vars=val_cols1)
+    stacked_actions2 = pd.melt(stacked_agents, id_vars=id_cols, value_vars=val_cols2)
+    # stacked_actions1["value_or_prob"] = stacked_actions1["variable"].apply(lambda x: x.split("_")[0])
+    stacked_actions1["action"] = stacked_actions1["variable"].apply(lambda x: x.split("_")[-1])
+    stacked_actions1["action"] = stacked_actions1["action"].astype(int)
+    stacked_actions1 = stacked_actions1.rename({"value": "value"}, axis=1)
+    stacked_actions1 = stacked_actions1.drop("variable", axis=1)
 
-    stacked_actions.pivot(columns="value_or_prob", values="value")
-    stacked_actions = stacked_actions.drop("variable", axis=1)
+    stacked_actions2["action"] = stacked_actions2["variable"].apply(lambda x: x.split("_")[-1])
+    stacked_actions2["action"] = stacked_actions2["action"].astype(int)
+    stacked_actions2 = stacked_actions2.rename({"value": "prob"}, axis=1)
+    stacked_actions2 = stacked_actions2.drop("variable", axis=1)
 
-    group_cols = [x for x in stacked_actions.columns if x not in ["value_or_prob", "value"]]
+    # stacked_actions.pivot(columns="value_or_prob", values="value")
+    # stacked_actions = stacked_actions.drop("variable", axis=1)
+
+    join_cols = [x for x in stacked_actions1.columns if x not in ["prob", "value"]]
+    final = pd.merge(stacked_actions1, stacked_actions2, left_on=join_cols, right_on=join_cols)
+
+    # group_cols = [x for x in stacked_actions.columns if x not in ["value_or_prob", "value"]]
 
 
-    def groupby_pic(sub): 
-        val = sub.loc[sub["value_or_prob"] == "value", "value"].iloc[0]
-        prob = sub.loc[sub["value_or_prob"] == "prob", "value"].iloc[0]
-        return pd.Series({"value": val, "prob":prob})
+    # def groupby_pic(sub): 
+    #     val = sub.loc[sub["value_or_prob"] == "value", "value"].iloc[0]
+    #     prob = sub.loc[sub["value_or_prob"] == "prob", "value"].iloc[0]
+    #     return pd.Series({"value": val, "prob":prob})
 
-    stacked_actions = stacked_actions.groupby(group_cols, as_index=False).apply(groupby_pic)
-    stacked_actions["chosen_action"] = stacked_actions["chosen_action"] == stacked_actions["action"]
+    # stacked_actions = stacked_actions.groupby(group_cols, as_index=False).apply(groupby_pic)
+    # stacked_actions["chosen_action"] = stacked_actions["chosen_action"] == stacked_actions["action"]
+    final["chosen_action"] = final["chosen_action"] == final["action"]
+    final = final.sort_values(["time", "agent", "action"])
 
-    stacked_actions = stacked_actions.sort_values(["time", "agent", "action"])
 
-    return stacked_actions
+    return final

@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import os
 import pdb
+import tqdm
 from datetime import datetime
 from environment import FrequencySpectrumEnv
 from agent import DynamicSpectrumAccessAgent1, DynamicSpectrumAccessAgentPeriodic#, DynamicSpectrumAccessAgent2
@@ -20,19 +21,20 @@ for device in visible_devices:
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--eps_decay", "-epsd", default=1e-5)
-parser.add_argument("--epsilon", "-eps", default=0.1)
-parser.add_argument("--num_agents", "-na", default=2)
-parser.add_argument("--num_bands", "-b", default=1)
-parser.add_argument("--temporal_length", "-tl", default=5)
+parser.add_argument("--eps_decay", "-epsd", default=1e-5, type=float)
+parser.add_argument("--epsilon", "-eps", default=0.1, type=float)
+parser.add_argument("--num_agents", "-na", default=2, type=int)
+parser.add_argument("--num_bands", "-b", default=1, type=int)
+parser.add_argument("--temporal_length", "-tl", default=5, type=int)
 parser.add_argument("--reward_type", "-r", default="collisionpenality2")
 parser.add_argument("--obs_type", "-o", default="aggregate3")
 parser.add_argument("--agents_shared_memory", "-sm", default=1)
-parser.add_argument("--buffer_size", "-bs", default=1000)
-parser.add_argument("--episode_len", "-el", default=40001)
-parser.add_argument("--temperature", "-t", default=0.005)
+parser.add_argument("--buffer_size", "-bs", default=1000, type=int)
+parser.add_argument("--episode_len", "-el", default=40001, type=int)
+parser.add_argument("--temperature", "-t", default=0.005, type=float)
+parser.add_argument("--reward_history_len", "-rhl", default=100, type=int)
 
-
+args = parser.parse_args()
 all_config = parser.parse_args().__dict__
 
 
@@ -58,8 +60,13 @@ all_config["agent_homogeneity"] = "all_same"
 
 pd.DataFrame.from_dict([all_config]).to_csv(path + "/config.csv")
 
-
-env = FrequencySpectrumEnv(num_bands, num_agents, temporal_len=int(all_config["temporal_length"]), reward_type=all_config["reward_type"], observation_type=all_config["obs_type"])
+env = FrequencySpectrumEnv(
+    num_bands,
+    num_agents, 
+    temporal_len=int(all_config["temporal_length"]),
+    reward_history_len = args.reward_history_len,
+    reward_type=all_config["reward_type"], 
+    observation_type=all_config["obs_type"])
 
 agents = [DynamicSpectrumAccessAgent1(num_bands,
                                         all_config["obvs_space_dim"], 
@@ -88,8 +95,8 @@ counter = 0
 agent_values = []
 agent_action_prob = []
 
-while True:
-    counter += 1
+for counter in tqdm.tqdm(range(args.episode_len)):
+    # counter += 1
 
     if counter > int(all_config["episode_len"]):
         print("Breaking because episode is done")
