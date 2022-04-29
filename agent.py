@@ -118,9 +118,11 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         self.batch_size = 6
         self.q_net = DDQN(num_bands, obvs_space_dim, temporal_length)
         self.target_net = DDQN(num_bands, obvs_space_dim, temporal_length)
-        opt = tf.keras.optimizers.Adam(learning_rate=lr)
-        self.q_net.compile(loss='mse', optimizer=opt)
-        self.target_net.compile(loss='mse', optimizer=opt)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+        self.loss_fn = tf.keras.losses.MeanSquaredError()
+        # self.q_net.compile(loss='MeanSquaredError', optimizer=opt, run_eagerly=True)
+        self.update_target()
+        # self.target_net.compile(loss='MeanSquaredError', optimizer=opt, run_eagerly=True)
         self.temporal_length = temporal_length
         self.agent_id = [str(x) for x in np.random.randint(0, high=9, size=10).tolist()]
         self.agent_id = "".join(self.agent_id)
@@ -146,26 +148,29 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
             Qs = self.q_net.advantage(state[np.newaxis, :, :])
             self.last_value_function = Qs.numpy()[0].tolist()
 
-            # Set the minimum value to be 0 so that after exp the minimum is 1
-            Qs_norm = Qs - np.min(Qs)
+            Qs_num = Qs.numpy()
+            action = np.random.choice(np.flatnonzero(Qs_num == Qs_num.max()))
 
-            # Changing to try and have temp control exploration
-            actions = np.exp(Qs_norm/self.temperature)
+            # # Set the minimum value to be 0 so that after exp the minimum is 1
+            # Qs_norm = Qs - np.min(Qs)
 
-            # Sometimes large actions can end up as + inf here.
-            # In this case just take the argmax
-            if  np.any(np.isinf(actions)) or np.isinf(np.sum(actions)):
-                actions = np.zeros(len(Qs[0]))
-                actions[np.argmax(Qs)] = 1
+            # # Changing to try and have temp control exploration
+            # actions = np.exp(Qs_norm/self.temperature)
 
-            prob = (actions / np.sum(actions)).reshape(-1)
-            self.last_prob_value = prob.tolist()
+            # # Sometimes large actions can end up as + inf here.
+            # # In this case just take the argmax
+            # if  np.any(np.isinf(actions)) or np.isinf(np.sum(actions)):
+            #     actions = np.zeros(len(Qs[0]))
+            #     actions[np.argmax(Qs)] = 1
 
-            try:
-                action = np.random.choice(np.arange(len(prob)), p=prob)
-            except:
-                pdb.set_trace()
-                print("whatttt")
+            # prob = (actions / np.sum(actions)).reshape(-1)
+            # self.last_prob_value = prob.tolist()
+
+            # try:
+            #     action = np.random.choice(np.arange(len(prob)), p=prob)
+            # except:
+            #     pdb.set_trace()
+            #     print("whatttt")
 
 
         #   if np.any(np.isinf(actions)) or (np.sum(actions) == 0):
@@ -227,21 +232,43 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
             self.update_target()
         states, actions, rewards, next_states, dones = self.memory.sample_exp(self.batch_size)
         
-        target = self.q_net.predict(states)
         
-        next_state_val = self.target_net.predict(next_states)
-        max_action = np.argmax(self.q_net.predict(next_states), axis=1)
+        next_state_val_target_net = self.target_net.predict(next_states)
+        next_state_val_q_net = self.q_net.predict(next_states)
+
+        # Making change the maximum and the value should come from the target network.
+        # Actually no for dueling it comes from q
+        max_action = np.argmax(next_state_val_q_net, axis=1)
+        #max_action = np.argmax(next_state_val_target_net, axis=1)
         batch_index = np.arange(self.batch_size, dtype=np.int32)
-        q_target = np.copy(target)  #optional
+        
 
         # q_target[batch_index, actions] = rewards + self.gamma * next_state_val[batch_index, max_action]*dones
         
         # The shapes of actions and everything were messed up so training wasn't occuring properly
-        q_target[batch_index, actions[:, 0]] = rewards[:, 0] + self.gamma * next_state_val[batch_index, max_action]*dones[:, 0]
-        self.q_net.train_on_batch(states, q_target)
+        # q_target[batch_index, actions[:, 0]] = rewards[:, 0] + self.gamma * next_state_val[batch_index, max_action]*dones[:, 0]
+        # pdb.set_trace()
+        # self.q_net.train_on_batch(states, q_target)
+
+
+
+        updated_values_these_actions = rewards[:, 0] + self.gamma * next_state_val_target_net[batch_index, max_action]*dones[:, 0]
+
+        with tf.GradientTape() as tape:
+            state_values = self.q_net(states, training=True)
+            state_values_these_actions = tf.gather_nd(params=state_values, indices=actions, batch_dims=1)
+            loss = self.loss_fn(state_values_these_actions, updated_values_these_actions)
+
+        # Compute gradients
+        gradients = tape.gradient(loss, self.q_net.trainable_variables)
+
+
+        # Update weights
+        self.optimizer.apply_gradients(zip(gradients, self.q_net.trainable_variables))
 
         self.update_epsilon()
         self.trainstep += 1
+
 
 # class DynamicSpectrumAccessAgent2(DynamicSpectrumAccessAgent1):
 #     """Dynamic Spectrum Agent with:
