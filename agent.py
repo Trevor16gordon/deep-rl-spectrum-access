@@ -6,7 +6,7 @@ Referenced this webpage: https://towardsdatascience.com/deep-q-network-dqn-ii-b6
 
 import tensorflow as tf
 import numpy as np
-from model import DDQN
+from model import DDQN, Actor, Critic, ActorCritic
 import pdb
 
 
@@ -60,7 +60,7 @@ class DynamicSpectrumAccessAgentPeriodic(DynamicSpectrumAccessAgentBase):
         _type_: _description_
     """
 
-    def __init__(self, chosen_band, num_on_periods, num_off_periods) -> None:
+    def __init__(self, chosen_band, num_on_periods, num_off_periods, num_bands) -> None:
         super().__init__()
         self.chosen_band = chosen_band
         self.num_on_periods = num_on_periods
@@ -70,8 +70,10 @@ class DynamicSpectrumAccessAgentPeriodic(DynamicSpectrumAccessAgentBase):
         self.beta = 0
         self.period = self.num_on_periods + self.num_off_periods
         self.agent_id = 1234
+        self.last_value_function = np.zeros(num_bands+1)
+        self.last_prob_value = np.zeros(num_bands+1)
 
-    def act(self, state, save_visualization_filepath=""):
+    def act(self, state):
         """Given the current state give a distribution on actions
 
         Args:
@@ -140,7 +142,7 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         # Las prob value will be the softmax temperature resulting action probabilities
         self.last_prob_value = np.zeros(self.num_bands+1)
 
-    def act(self, state, save_visualization_filepath=False):
+    def act(self, state):
 
         if np.random.rand() <= self.epsilon:
             self.last_value_function = np.ones(
@@ -217,6 +219,146 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         gradients = tape.gradient(loss, self.q_net.trainable_variables)
         self.optimizer.apply_gradients(
             zip(gradients, self.q_net.trainable_variables))
+        self.update_epsilon()
+        self.trainstep += 1
+
+
+
+class DynamicSpectrumAccessAgentActorCritic(DynamicSpectrumAccessAgentBase):
+    """Dynamic Spectrum Agent with:
+
+    Model: 
+    - Don't need a memory buffer
+    - Don't need a target network
+
+    Input Data Preparation
+    - Uses just the aggregate
+
+    Args:
+        DynamicSpectrumAccessAgentBase (_type_): _description_
+    """
+
+    def __init__(self, num_bands, obvs_space_dim, gamma=0.9, epsilon=0.02, lr=0.0001, temporal_length=6, epsilon_decay=1e-3):
+        super(DynamicSpectrumAccessAgentActorCritic, self).__init__()
+        self.num_bands = num_bands
+        self.n_action_space = num_bands + 1
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.beta = 1
+        self.min_epsilon = 0.01
+        self.epsilon_decay = epsilon_decay
+        self.trainstep = 0
+        self.batch_size = 6
+        self.temporal_length = temporal_length
+
+        self.actor_critic = ActorCritic(num_bands, obvs_space_dim, temporal_length)
+        self.actor_critic_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+
+        # self.actor = Actor(num_bands, obvs_space_dim, temporal_length)
+        # self.critic = Critic(num_bands, obvs_space_dim, temporal_length)
+        # self.actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+        # self.critic_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+        
+        self.loss_fn = tf.keras.losses.MeanSquaredError()
+        
+        self.agent_id = [str(x) for x in np.random.randint(
+            0, high=9, size=10).tolist()]
+        self.agent_id = "".join(self.agent_id)
+
+        # Last value function should be the same shape as number of bands + 1
+        self.last_value_function = np.zeros(self.num_bands+1)
+
+        # Las prob value will be the softmax temperature resulting action probabilities
+        self.last_prob_value = np.zeros(self.num_bands+1)
+
+    def act(self, state):
+
+        if np.random.rand() <= self.epsilon:
+            self.last_value_function = np.ones(
+                self.num_bands+1)/(self.num_bands+1)
+            self.last_prob_value = np.ones(self.num_bands+1)/(self.num_bands+1)
+            return np.random.choice([i for i in range(self.n_action_space)])
+        else:
+            action, _ = self.select_action(state)
+            return action
+
+    def select_action(self, state):
+        ''' Selects an action given current state
+        Args:
+        - state (Array): Array of action space in an environment
+
+
+        Note: the environment is setup to first get the actions from the environment
+        
+        Return:
+        - (int): action that is selected
+        - (float): log probability of selecting that action given state and network
+        '''
+        state = tf.convert_to_tensor(state)
+        state = tf.expand_dims(state, 0)
+        action_probs, value = self.actor_critic.predict(state)
+        self.last_value_function = action_probs[0].tolist()
+        action = np.random.choice(range(len(action_probs[0])), p= action_probs[0])
+        log_prob = tf.math.log(action_probs[0, action])
+        return action, log_prob
+
+    def observe_result(self, state, action, reward, next_state, done):
+        """Given information about what happened in environment observe what happened
+
+        Args:
+            state (np.array): Shape should be (num_agents, num_in_time, __)
+            action (np.array): _description_
+            reward np.int32: The reward
+            next_state (np.array): Varyiable size array for what an agent considers the state input to be
+            done (bool): Whether the agent is done.
+
+        Raises:
+            NotImplementedError: _description_
+        """
+        self.train(state, action, reward, next_state, done)
+
+    def update_epsilon(self):
+        self.epsilon = self.epsilon - \
+            self.epsilon_decay if self.epsilon > self.min_epsilon else self.min_epsilon
+        return self.epsilon
+
+    def train(self, state, action, reward, next_state, done):
+        """Sample from memory buffer and train
+
+        Max q value comes from q network, value comes from the target network
+
+
+
+
+        But we need the gradients to last.
+
+        """     
+
+        state = tf.convert_to_tensor(state)
+        state = tf.expand_dims(state, 0)
+        next_state = tf.convert_to_tensor(next_state)
+        next_state = tf.expand_dims(next_state, 0)
+
+        _, next_state_value = self.actor_critic(next_state)
+
+        with tf.GradientTape() as tape:
+
+            
+            action_probs, state_val = self.actor_critic(state)
+            state_val_target = reward + self.gamma * next_state_value * (1 - done)
+
+            loss_critic = self.loss_fn(state_val_target, state_val)
+
+            state_val_diff = tf.math.subtract(state_val_target, state_val)
+            log_prob =  tf.math.log(action_probs[0, action])
+            loss_actor = state_val_diff * -1 * log_prob
+
+            loss_total = loss_critic + loss_actor
+
+        # Compute gradients and Update weights
+        gradients_actor_critic = tape.gradient(loss_total, self.actor_critic.trainable_variables)
+        self.actor_critic_optimizer.apply_gradients(zip(gradients_actor_critic, self.actor_critic.trainable_variables))
+        
         self.update_epsilon()
         self.trainstep += 1
 

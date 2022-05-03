@@ -11,7 +11,7 @@ class TrainingConfig():
     NUM_AGENTS = 2
     NUM_BANDS = 1
     TEMPORAL_LENGTH = 5
-    REWARD_TYPE = "collisionpenality2"
+    REWARD_TYPE = "transmision_normalized"
     OBS_TYPE = "aggregate3"
     AGENTS_SHARED_MEMORY = True
     BUFFER_SIZE = 1000

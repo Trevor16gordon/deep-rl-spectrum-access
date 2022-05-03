@@ -37,5 +37,76 @@ class DDQN(tf.keras.Model):
         return self.advantage_network(input)
 
 
+class ActorCritic(tf.keras.Model):
+
+    def __init__(self, num_bands, input_shape_dim, temporal_length):
+        super().__init__()
+        self.num_bands = num_bands
+        self.input_shape_dim = input_shape_dim
+        self.temporal_length = temporal_length
+        self.init_model()
+        
+    def init_model(self):
+        action_space = self.num_bands + 1
+        total_input_shape = (self.temporal_length, self.input_shape_dim)
+        input_shape = total_input_shape
+
+        input_a = tf.keras.Input(shape=input_shape)
+        lstm_lay = tf.keras.layers.LSTM(100)(input_a)
+        actor_lay = tf.keras.layers.Dense(10, activation='relu')(lstm_lay)
+        actor_lay = tf.keras.layers.Dense(action_space, activation="softmax")(actor_lay)
+        critic_lay = tf.keras.layers.Dense(10, activation='relu')(lstm_lay)
+        critic_lay = tf.keras.layers.Dense(1)(critic_lay)
+        self.m = tf.keras.Model(inputs=input_a, outputs=[actor_lay, critic_lay])
+
+    def call(self, input):
+        return self.m(input)
+
+class Critic(tf.keras.Model):
+
+    def __init__(self, num_bands, input_shape_dim, temporal_length):
+        super().__init__()
+        self.num_bands = num_bands
+        self.input_shape_dim = input_shape_dim
+        self.temporal_length = temporal_length
+        self.init_model()
+        
+    def init_model(self):
+        self.m = tf.keras.Sequential(
+            [
+                tf.keras.layers.LSTM(100, activation="relu", name="layer1", input_shape=(self.temporal_length, self.input_shape_dim)),
+                tf.keras.layers.Dense(100, activation="relu", name="layer2"),
+                tf.keras.layers.Dense(1, name="output"),
+            ]
+        )
+
+    def call(self, input):
+        return self.m(input)
+
+
+class Actor(tf.keras.Model):
+
+    def __init__(self, num_bands, input_shape_dim, temporal_length):
+        super().__init__()
+        self.num_bands = num_bands
+        self.input_shape_dim = input_shape_dim
+        self.temporal_length = temporal_length
+        self.init_model()
+        
+    def init_model(self):
+        
+        self.m = tf.keras.Sequential(
+            [
+                tf.keras.layers.LSTM(100, activation="relu", name="layer1", input_shape=(self.temporal_length, self.input_shape_dim)),
+                tf.keras.layers.Dense(100, activation="relu", name="layer2"),
+                tf.keras.layers.Dense(self.num_bands+1, activation="softmax", name="output"),
+            ]
+        )
+
+    def call(self, input):
+        return self.m(input)
+
+
+
 
 

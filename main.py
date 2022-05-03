@@ -68,7 +68,7 @@ def train(args):
                                                         epsilon_decay=args.eps_decay) for _ in range(args.num_agents)]
 
     if args.agent_homogeneity == "one_periodic":
-        agents[-1] = DynamicSpectrumAccessAgentPeriodic(1, 1, 1)
+        agents[-1] = DynamicSpectrumAccessAgentPeriodic(1, 1, 1, args.num_bands)
 
     if args.agents_shared_memory:
         for agent_i in agents[1:]:
