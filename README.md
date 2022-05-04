@@ -33,9 +33,13 @@ There are many different hyperparamaters that can be changed in this problem.
 
 
 **The Observations:** At the very least, agents are able to observe their own actions and whether they had a successful transmission. At most, agents can view the actions of all other agents
+
 **The Reward Model:** Should agents only recieve +1 for successful transmissions? What about -1 for collisions?
+
 **Reinforcement Learning Algorithm:** What structure is used so that agents can make decisions and learn? DQN? DDQN? PPO?
+
 **Agent Scenarios:** Are all agents the same type of agent or are there some primary users.
+
 **Action Space:** Most basic agents can choose which frequency band or not to transmit. In future scenarios, agents could decide their transmission power etc.
 
 
