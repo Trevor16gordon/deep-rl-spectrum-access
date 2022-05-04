@@ -27,14 +27,19 @@ def train(args):
 
     all_config = args.__dict__
 
+    all_config = {k: v for k, v in args.__dict__.items()}
+
+
     if all_config["obs_type"] == "own_actions":
-        all_config["obvs_space_dim"] = args.num_bands+2
+        obvs_space_dim = args.num_bands+2
     elif all_config["obs_type"] == "aggregate":
-        all_config["obvs_space_dim"] = args.num_bands
+        obvs_space_dim = args.num_bands
     elif all_config["obs_type"] == "aggregate2":
-        all_config["obvs_space_dim"] = 2*args.num_bands+2
+        obvs_space_dim = 2*args.num_bands+2
     elif all_config["obs_type"] == "aggregate3":
-        all_config["obvs_space_dim"] = 2*args.num_bands+2
+        obvs_space_dim = 2*args.num_bands+2
+
+    all_config["obvs_space_dim"] = obvs_space_dim
 
     all_config["time_folder"] = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
     path = ReportingConfig.TOP_LEVEL_FOLDER + all_config["time_folder"]
@@ -54,7 +59,7 @@ def train(args):
 
     if args.model_type == "ddqn":
         agents = [DynamicSpectrumAccessAgent1(args.num_bands,
-                                              args.obvs_space_dim,
+                                              obvs_space_dim,
                                               temporal_length=args.temporal_length,
                                               epsilon=args.epsilon,
                                               temperature=args.temperature,
@@ -62,7 +67,7 @@ def train(args):
                                               epsilon_decay=args.eps_decay) for _ in range(args.num_agents)]
     else:
         agents = [DynamicSpectrumAccessAgentActorCritic(args.num_bands,
-                                                        args.obvs_space_dim,
+                                                        obvs_space_dim,
                                                         temporal_length=args.temporal_length,
                                                         epsilon=args.epsilon,
                                                         epsilon_decay=args.eps_decay) for _ in range(args.num_agents)]
@@ -105,12 +110,12 @@ def train(args):
         state = next_state
         total_reward += sum(rewards)
 
-        if (counter % ReportingConfig.PRINT_UPDATE_EVERY) == 0:
+        if ((counter + 1) % ReportingConfig.PRINT_UPDATE_EVERY) == 0:
             pbar.set_description(
                 (f"Episodes: {counter}  Total reward: {total_reward} Throughput: {env.throughput:.2f}"
                 f" Collisions: {env.num_collisions} Epsilon: {agents[0].epsilon:.2f}"))
 
-        if (counter % ReportingConfig.SAVE_CHECKPOINT_CSV_EVERY) == 0:
+        if ((counter + 1) % ReportingConfig.SAVE_CHECKPOINT_CSV_EVERY) == 0:
             agent_actions = np.array(env.agent_actions_complete_history)
             df_more_info = agent_actions_to_information_table(
                 agent_actions, reward_type=all_config["reward_type"])
@@ -124,33 +129,33 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--eps_decay", "-epsd",
-                        default=TrainingConfig.EPS_DECAY, type=float)
+                        default=TrainingConfig.eps_decay, type=float)
     parser.add_argument("--epsilon", "-eps",
-                        default=TrainingConfig.EPSILON, type=float)
+                        default=TrainingConfig.epsilon, type=float)
     parser.add_argument("--num_agents", "-na",
-                        default=TrainingConfig.NUM_AGENTS, type=int)
+                        default=TrainingConfig.num_agents, type=int)
     parser.add_argument("--num_bands", "-b",
-                        default=TrainingConfig.NUM_BANDS, type=int)
+                        default=TrainingConfig.num_bands, type=int)
     parser.add_argument("--temporal_length", "-tl",
-                        default=TrainingConfig.TEMPORAL_LENGTH, type=int)
+                        default=TrainingConfig.temporal_length, type=int)
     parser.add_argument("--reward_type", "-r",
-                        default=TrainingConfig.REWARD_TYPE, type=str)
+                        default=TrainingConfig.reward_type, type=str)
     parser.add_argument("--obs_type", "-o",
-                        default=TrainingConfig.OBS_TYPE, type=str)
+                        default=TrainingConfig.obs_type, type=str)
     parser.add_argument("--agents_shared_memory", "-sm",
-                        default=TrainingConfig.AGENTS_SHARED_MEMORY, type=int)
+                        default=TrainingConfig.agents_shared_memory, type=int)
     parser.add_argument("--buffer_size", "-bs",
-                        default=TrainingConfig.BUFFER_SIZE, type=int)
+                        default=TrainingConfig.buffer_size, type=int)
     parser.add_argument("--episode_len", "-el",
-                        default=TrainingConfig.EPISODE_LEN, type=int)
+                        default=TrainingConfig.episode_len, type=int)
     parser.add_argument("--temperature", "-t",
-                        default=TrainingConfig.TEMPERATURE, type=float)
+                        default=TrainingConfig.temperature, type=float)
     parser.add_argument("--reward_history_len", "-rhl",
-                        default=TrainingConfig.REWARD_HISTORY_LEN, type=int)
+                        default=TrainingConfig.reward_history_len, type=int)
     parser.add_argument("--model_type", "-mt",
-                        default=TrainingConfig.MODEL_TYPE, type=str)
+                        default=TrainingConfig.model_type, type=str)
     parser.add_argument("--agent_homogeneity", "-ah",
-                        default=TrainingConfig.AGENT_HOMOGENEITY, type=str)
+                        default=TrainingConfig.agent_homogeneity, type=str)
 
     args = parser.parse_args()
 
