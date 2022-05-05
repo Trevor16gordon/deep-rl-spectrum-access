@@ -88,14 +88,19 @@ def agent_actions_to_information_table(agent_actions, num_bands=None, reward_typ
 
     df = pd.concat([df, band_status, rewards, collision_stats], axis=1)
 
-    # df["time"] = df.index
-    # df1 = df.melt(id_vars="time", value_vars=["agent_0", "agent_1", "agent_2"], var_name='Agent', value_name='Action')
-    # df2 = df.melt(id_vars="time", value_vars=rew_col_names, var_name='Agent', value_name='Reward')
-    # df3 = df.melt(id_vars="time", value_vars=cum_rew_col_names, var_name='Agent', value_name='Cumulative Reward')
-    # df4 = df.melt(id_vars="time", value_vars=["band_0", "band_1", "band_2"], var_name='Frequency', value_name='Status')
-
-    # df3
     df["time"] = df.index
+
+    
+    cum_rewards = df[cum_rew_col_names].values
+    # c is the number of steps in the past to calculate the change in cum_reward
+    c = 100
+    cum_reward_change = np.concatenate([cum_rewards[:c, :], cum_rewards[c:, :] - cum_rewards[:-c, :]], axis=0)
+    avg_cum_reward_change = np.sum(cum_reward_change, axis=1)/len(cum_rew_col_names)
+    diff_to_max = np.abs(avg_cum_reward_change -np.max(cum_reward_change, axis=1))
+    diff_to_min = np.abs(avg_cum_reward_change - np.min(cum_reward_change, axis=1))
+    fairness_index = 1 - np.maximum(diff_to_max, diff_to_min)/avg_cum_reward_change
+    df["fairness_index"] = fairness_index
+    df["avg_cum_reward_change"] = avg_cum_reward_change
     return df
 
 
