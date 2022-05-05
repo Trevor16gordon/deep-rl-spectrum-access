@@ -99,8 +99,7 @@ All agents recieve the sum of all agent rewards.
 
 #### Reward Type = transmision_normalized
 
-# Positive reward modification
-Original rewards taken from collisionpenality2 then scaled by the following. Successful transmissions are scaled by pos_mul. Collisions are scaled by neg_mul.
+Positive reward modification: Original rewards taken from collisionpenality2 then scaled by the following. Successful transmissions are scaled by pos_mul. Collisions are scaled by neg_mul.
 
 Rewards are divided by the number of successful transmissions in the reward_hist buffer
 Intended to make transmissions more valuable to those who haven't gotten them
@@ -109,6 +108,12 @@ And to make transmissions less valuable to those who have been sending
 Collisions are divided by the number of no transmits in the reward_hist buffer
 Intended to make collisions less costly to those who haven't been transmitting
 And to make collisions more costly to those who have been successful
+
+
+R = \begin{Bmatrix}
+R*RM+ & success\\ 
+R*RM- & collision
+\end{Bmatrix}
 
 pos_mul = (no_trans / self.reward_history_len) / (1 + (successes / self.reward_history_len))
 neg_mul = (successes / self.reward_history_len) / (1 + (no_trans / self.reward_history_len))
