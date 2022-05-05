@@ -23,9 +23,8 @@ for device in visible_devices:
     assert device.device_type != 'GPU'
 
 
-def train(args):
+def train_agents(args, report_tune=False):
 
-    all_config = args.__dict__
 
     all_config = {k: v for k, v in args.__dict__.items()}
 
@@ -38,8 +37,12 @@ def train(args):
     all_config["obvs_space_dim"] = obvs_space_dim
 
     all_config["time_folder"] = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
-    path = ReportingConfig.TOP_LEVEL_FOLDER + all_config["time_folder"]
+    unique_id = "".join([str(x) for x in np.random.randint(0, high=9, size=10).tolist()])
+    path = ReportingConfig.TOP_LEVEL_FOLDER + all_config["time_folder"] + "_" + unique_id
+    print(f"Making path at {path}")
     os.mkdir(path)
+
+    
 
     df_config = pd.DataFrame.from_dict([all_config])
     df_config.to_csv(os.path.join(
@@ -56,6 +59,7 @@ def train(args):
     if args.model_type == "ddqn":
         agents = [DynamicSpectrumAccessAgent1(args.num_bands,
                                               obvs_space_dim,
+                                              learning_rate=args.learning_rate,
                                               temporal_length=args.temporal_length,
                                               epsilon=args.epsilon,
                                               temperature=args.temperature,
@@ -64,6 +68,7 @@ def train(args):
     else:
         agents = [DynamicSpectrumAccessAgentActorCritic(args.num_bands,
                                                         obvs_space_dim,
+                                                        learning_rate=args.learning_rate,
                                                         temporal_length=args.temporal_length,
                                                         epsilon=args.epsilon,
                                                         epsilon_decay=args.eps_decay) for _ in range(args.num_agents)]
@@ -82,8 +87,9 @@ def train(args):
     agent_values = []
     agent_action_prob = []
 
-    for counter in (pbar := tqdm.tqdm(range(args.episode_len))):
-        # counter += 1
+    # for counter in (pbar := tqdm.tqdm(range(args.episode_len))):
+    for counter in range(args.episode_len):
+        pbar = ""
 
         if counter > int(all_config["episode_len"]):
             print("Breaking because episode is done")
@@ -107,9 +113,12 @@ def train(args):
         total_reward += sum(rewards)
 
         if ((counter + 1) % ReportingConfig.PRINT_UPDATE_EVERY) == 0:
-            pbar.set_description(
+            print(
                 (f"Episodes: {counter}  Total reward: {total_reward} Throughput: {env.throughput:.2f}"
                 f" Collisions: {env.num_collisions} Epsilon: {agents[0].epsilon:.2f}"))
+            # pbar.set_description(
+            #     (f"Episodes: {counter}  Total reward: {total_reward} Throughput: {env.throughput:.2f}"
+            #     f" Collisions: {env.num_collisions} Epsilon: {agents[0].epsilon:.2f}"))
 
         if ((counter + 1) % ReportingConfig.SAVE_CHECKPOINT_CSV_EVERY) == 0:
             agent_actions = np.array(env.agent_actions_complete_history)
@@ -121,9 +130,18 @@ def train(args):
             merged.to_csv(f"{path}/history.csv")
 
 
+            if report_tune:
+                from ray import tune
+                channel_utilization = merged["moving_throughput"].iloc[-1]
+                fairness_index = merged["fairness_index"].iloc[-1]
+                tune.report(episode_reward_mean=channel_utilization, fairness_index=fairness_index)
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--learning_rate", "-lr",
+                        default=TrainingConfig.learning_rate, type=float)
     parser.add_argument("--eps_decay", "-epsd",
                         default=TrainingConfig.eps_decay, type=float)
     parser.add_argument("--epsilon", "-eps",
@@ -155,4 +173,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    train(args)
+    train_agents(args)
