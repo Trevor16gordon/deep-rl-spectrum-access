@@ -19,6 +19,9 @@ look for the link "Dash is running on http://127.0.0.1:8051/" and open that link
 ![Alt Text](https://github.com/Trevor16gordon/deep-rl-spectrum-access/blob/main/static/images/interactive_plotting.gif)
 
 
+## Overview of Repo Structure
+
+- environment.py
 
 # Documentation
 
@@ -83,23 +86,15 @@ The example below shows a slice along the agent dimension for 1 agent, a tempora
 | Action:      |  No Transmit | 1 | 0   | 0   | 0   | 1   |
 | Success:     |              | 0 | 1   | -1  | -1  | 0   |
 
-### The Reward Model
+### Agent Rewards
 
-#### Reward Type = transmission1
-Agents receive +1 for successful transmissions and 0 otherwise.
+Reward Type can be any of the following:
+1. **transmission1**: Agents receive +1 for successful transmissions and 0 otherwise.
+2. **collisionpenality1**: Agents receive +1 for successful transmissions, 0 for no transmit, and -1 for collisions.
+3. **collisionpenality2**: Agents receive +2 for successful transmissions, 0 for no transmit, and -1 for collisions.
+4. **centralized**: All agents recieve the sum of all agent rewards.
+5. **transmision_normalized**: Positive reward modification: Original rewards taken from collisionpenality2 then scaled by the following. Successful transmissions scaled by the percentage of previous timesteps where the agent didn't transmit. They are divided by the percentage of previous timesteps where the agent had successful transmissions. The opposite scaling is used for collisions. As a result, agents who haven't been transmitting will have larger rewards and smaller collision penalties compared to agents who have had successful transmissions. The complete formulas are shown below:
 
-#### Reward Type = collisionpenality1
-Agents receive +1 for successful transmissions, 0 for no transmit, and -1 for collisions.
-
-#### Reward Type = collisionpenality2
-Agents receive +2 for successful transmissions, 0 for no transmit, and -1 for collisions.
-
-#### Reward Type = centralized
-All agents recieve the sum of all agent rewards.
-
-#### Reward Type = transmision_normalized
-
-Positive reward modification: Original rewards taken from collisionpenality2 then scaled by the following. Successful transmissions scaled by the percentage of previous timesteps where the agent didn't transmit. They are divided by the percentage of previous timesteps where the agent had successful transmissions. The opposite scaling is used for collisions. As a result, agents who haven't been transmitting will have larger rewards and smaller collision penalties compared to agents who have had successful transmissions. The complete formulas are shown below:
 
 ![Model](static/images/reward_normalizer.png)
 
@@ -107,6 +102,12 @@ Positive reward modification: Original rewards taken from collisionpenality2 the
 ## Reinforcement Learning Algorithms
 
 Several papers have started by using the popular Deep Q Learning (DQN) reinforcement learning strategy. A neural network is used to learn the internal value function of state action pairs. Because there is a strong temporal component to this problem (ex: the order of past observations matter), a neural network that can handle temporal sequences is used. Speicficall an LSTM is used to aggregate previous observations. In this problem the length of the temporal segment is a hyper parameter. 
+
+
+
+# Results
+
+## One Primary User
 
 
 
