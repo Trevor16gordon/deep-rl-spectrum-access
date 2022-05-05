@@ -33,10 +33,6 @@ def train(args):
     if all_config["obs_type"] == "own_actions":
         obvs_space_dim = args.num_bands+2
     elif all_config["obs_type"] == "aggregate":
-        obvs_space_dim = args.num_bands
-    elif all_config["obs_type"] == "aggregate2":
-        obvs_space_dim = 2*args.num_bands+2
-    elif all_config["obs_type"] == "aggregate3":
         obvs_space_dim = 2*args.num_bands+2
 
     all_config["obvs_space_dim"] = obvs_space_dim

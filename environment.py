@@ -112,37 +112,14 @@ class FrequencySpectrumEnv(gym.Env):
         """
         if self.observation_type == "aggregate":
             observations = self._get_observation_aggregate(agent_actions_history)
-        elif self.observation_type == "aggregate2":
-            observations = self._get_observation_aggregate2(agent_actions_history)
-        elif self.observation_type == "aggregate3":
-            observations = self._get_observation_aggregate3(agent_actions_history)
         elif self.observation_type == "own_actions":
             observations = self._get_observation_own_actions(agent_actions_history)
+        elif self.observation_type == "is_channel_available":
+            observations = self._get_observation_is_channel_available(agent_actions_history)
         else:
             raise KeyError(f"observation type needs to be in [aggregate, ].. got {self.observation_type}")
 
         return observations
-
-    def _get_observation_aggregate(self, agent_actions_history):
-        """Get the observation for an agent. includes everything
-
-        Each agent knows whether there is communication in a channel but they don't know who sent it
-        Each agent has the exact same information
-
-        # Channel states: 0 for no transmission, 1 for successful, 2 for collisions
-
-        Args:
-            agent_actions_history (_type_): Complete information about who attempted communication where. Shape is (num_time, num_freq + 1, num_agents)
-        
-        Returns:
-            list(states): state for all agents has shape (num_agents, num_in_time, __)
-        """
-        # SUM - to get collisions on temporal amount
-        obvs = agent_actions_history.sum(axis=2).reshape((self.temporal_len, -1))
-        obvs[obvs > 2] = 2
-        obvs = obvs[:, 1:]
-        obvs = np.tile(obvs, (self.num_agents, 1, 1))
-        return obvs
 
     def _get_observation_is_channel_available(self, agent_actions_history):
         """Channels available if no transmit or collision
@@ -169,20 +146,9 @@ class FrequencySpectrumEnv(gym.Env):
         obvs = np.tile(obvs, (self.num_agents, 1, 1))
         return obvs
 
-    def _get_observation_aggregate2(self, agent_actions_history):
-        """Like _get_observation_aggregate but agents can't see the state of no_transmit action space"""
-        obvs1 = self._get_observation_aggregate(agent_actions_history)
-        obvs2 = self._get_observation_own_actions(agent_actions_history)
-        obvs = np.concatenate([obvs1, obvs2], axis=2)
-        return obvs
-
-    def _get_observation_aggregate3(self, agent_actions_history):
-        """Like _get_observation_aggregate but agents can't see the state of no_transmit action space"""
+    def _get_observation_aggregate(self, agent_actions_history):
         obvs1 = self._get_observation_is_channel_available(agent_actions_history)
         obvs2 = self._get_observation_own_actions(agent_actions_history)
-        
-        # Collisions fail so NACK will be -1 and ACK will be 1. If we didn't transmit, leave at 0
-        obvs2[obvs2 >= 2] = -1
         obvs = np.concatenate([obvs1, obvs2], axis=2)
         return obvs
 
@@ -194,9 +160,7 @@ class FrequencySpectrumEnv(gym.Env):
         this state is returned as 
         0: No transmit
         1: success
-        2: collision
-
-        Other functions call this function but replace 2 with -1 so the NN can learn easier
+        -1: collision
 
         Args:
             agent_actions_history (_type_): Complete information about who attempted communication where. Shape is (num_time, num_freq + 1, num_agents)
@@ -219,6 +183,9 @@ class FrequencySpectrumEnv(gym.Env):
         obvs = np.concatenate([agent_actions_history, rewards], axis=1)
         obvs = np.swapaxes(obvs, 0, 1)
         obvs = np.swapaxes(obvs, 0, 2)
+
+        # Replace collisions with -1 so NN can learn easier
+        obvs[obvs >= 2] = -1
         
         return obvs
 
@@ -342,19 +309,9 @@ class FrequencySpectrumEnv(gym.Env):
             list(states): rewards for all agents has shape (num_agents, 1)
         """
         transmissions = agent_actions.sum(axis=1)
-        transmissions[transmissions > 2] = 2
         reward_info = transmissions.copy()
-        # reward_info[reward_info >= 2] = -1
-        # reward_info[reward_info == 1] = 2
-
-        # # Changing to make collisions a higher penalty
-        # reward_info[reward_info >= 2] = -2
-        # reward_info[reward_info == 1] = 1
-
-        # Changing to make collisions a higher reward
         reward_info[reward_info >= 2] = -1
         reward_info[reward_info == 1] = 3
-
         reward_info[0] = 0
         reward_n = reward_info[action_ints].reshape(-1)
         return reward_n

@@ -47,17 +47,14 @@ There are many different hyperparamaters that can be changed in this problem.
 
 Complete observability would mean that agents would have a history of all agents and their chosen actions. This would require some ledger and ability for all agents to read it. More realistically, I consider the following scenarios:
 
-#### Aggregate
-Each agent can see the status of all frequency channels with a 1 for successful transmissions, 2 for collisions and 0 for available.
-
 #### Own Actions
 Observation type where each agent has the least amount of information from the evnvironment. Each agent can see a one hot encoded vector of it's own chosen actions and whether it got a reward. 0 for no transmission. 1 for successful transmissions. -1 for a collision.
 
-#### Aggregate2
-Includes the concatenation of all info from Aggregate and Own Actions
+#### Channel Status
+Each agent can see whether there is communication or not on every channel. Channel is 0 for available and 1 for busy. Agents can not distuinguish between successful transmisions or collisions on a frequency band.
 
-#### Aggregate3
-Like Aggregate2 but the visibility into channel state is limited. Agents here can't distinguish whether busy channels include successful transmissions or collisions.
+#### Aggregate
+Includes the concatenation of all info from Own Actions and Channel Status
 
 ### The Reward Model
 
