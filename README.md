@@ -101,7 +101,7 @@ All agents recieve the sum of all agent rewards.
 
 Positive reward modification: Original rewards taken from collisionpenality2 then scaled by the following. Successful transmissions scaled by the percentage of previous timesteps where the agent didn't transmit. They are divided by the percentage of previous timesteps where the agent had successful transmissions. The opposite scaling is used for collisions. As a result, agents who haven't been transmitting will have larger rewards and smaller collision penalties compared to agents who have had successful transmissions. The complete formulas are shown below:
 
-![Model](static/images/reward_normalizer.jpg)
+![Model](static/images/reward_normalizer.png)
 
 
 ## Reinforcement Learning Algorithms
