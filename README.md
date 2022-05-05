@@ -50,11 +50,38 @@ Complete observability would mean that agents would have a history of all agents
 #### Own Actions
 Observation type where each agent has the least amount of information from the evnvironment. Each agent can see a one hot encoded vector of it's own chosen actions and whether it got a reward. 0 for no transmission. 1 for successful transmissions. -1 for a collision.
 
+The example below shows a slice along the agent dimension for 1 agent, a temporal length of 5, and 2 frequency bands.
+
+|              |              | t | t-1 | t-2 | t-3 | t-4 |
+|--------------|--------------|---|-----|-----|-----|-----|
+| Action:      |  Freq Band 1 | 0 | 0   | 0   | 1   | 0   |
+| Action:      |  Freq Band 0 | 0 | 1   | 1   | 0   | 0   |
+| Action:      |  No Transmit | 1 | 0   | 0   | 0   | 1   |
+| Success:     |              | 0 | 1   | -1  | -1  | 0   |
+
 #### Channel Status
 Each agent can see whether there is communication or not on every channel. Channel is 0 for available and 1 for busy. Agents can not distuinguish between successful transmisions or collisions on a frequency band.
 
+The example below shows a slice along the agent dimension for 1 agent, a temporal length of 5, and 2 frequency bands.
+
+|              |              | t | t-1 | t-2 | t-3 | t-4 |
+|--------------|--------------|---|-----|-----|-----|-----|
+| Band Status: |  Freq Band 1 | 0 | 1   | 0   | 1   | 1   |
+| Band Status: |  Freq Band 0 | 0 | 1   | 1   | 0   | 0   |
+
 #### Aggregate
 Includes the concatenation of all info from Own Actions and Channel Status
+
+The example below shows a slice along the agent dimension for 1 agent, a temporal length of 5, and 2 frequency bands.
+
+|              |              | t | t-1 | t-2 | t-3 | t-4 |
+|--------------|--------------|---|-----|-----|-----|-----|
+| Band Status: |  Freq Band 1 | 0 | 1   | 0   | 1   | 1   |
+| Band Status: |  Freq Band 0 | 0 | 1   | 1   | 0   | 0   |
+| Action:      |  Freq Band 1 | 0 | 0   | 0   | 1   | 0   |
+| Action:      |  Freq Band 0 | 0 | 1   | 1   | 0   | 0   |
+| Action:      |  No Transmit | 1 | 0   | 0   | 0   | 1   |
+| Success:     |              | 0 | 1   | -1  | -1  | 0   |
 
 ### The Reward Model
 
