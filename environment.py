@@ -1,10 +1,17 @@
+""" 
+Gym Environment for multi agent dynamics spectrum access.
+"""
 import gym
 import pdb
 import numpy as np
 from gym import spaces
 
 class FrequencySpectrumEnv(gym.Env):
-    """Multi Agent Environment for spectrum sharing"""
+    """Multi Agent Environment for dynamics spectrum access
+    
+    - At each timestep, agents choose with frequency band to transmit on, or to not transmit at all.
+    - The goal is to maximize channel utilization and make sure all agents have roughly the same number of successful packets.
+    """
 
     def __init__(self,
                  num_freq_bands,
@@ -14,24 +21,34 @@ class FrequencySpectrumEnv(gym.Env):
                  observation_type="aggregate",
                  reward_type="transmission1",
                  reward_history_len=100):
+        """Initialize the environment
+
+        Args:
+            num_freq_bands (int): The number of available frequency bands
+            num_agents (int): The number of agents
+            max_iterations (int, optional): Number of iterations before an episode completes. Defaults to 10000.
+            temporal_len (int, optional): Number of previous timesteps are available in the obvservation. Defaults to 3.
+            observation_type (str, optional): Specifies what the agents can observe. Defaults to "aggregate".
+            reward_type (str, optional): Specifies how agents receive rewards. Defaults to "transmission1".
+            reward_history_len (int, optional): If reward_type is "transmision_normalized" this is 
+                The number of timesteps in the past used for normalizing agent rewards and collisions. Defaults to 100.
+        """
         super().__init__()
         self.num_actions = num_freq_bands + 1
         self.num_freq_bands = num_freq_bands
         self.num_agents = num_agents
         self.agents = [x for x in range(num_agents)]
         self.action_space = spaces.Discrete(self.num_actions)
-        self.observation_space = spaces.Discrete(self.num_actions)
         self.max_iterations = max_iterations
         self.temporal_len = temporal_len
         self.agent_actions_history = np.zeros(
             (self.temporal_len, self.num_actions, self.num_agents), dtype=np.int32)
         self.observation_type = observation_type
+        self.observation_space = spaces.Discrete(self.num_actions)
         self.reward_type = reward_type
-        
         self.reward_history_len = reward_history_len
         self.reward_hist = np.zeros((self.reward_history_len, self.num_agents))
         self.reward_hist_pointer = 0
-
         # this is used by the main function to pull history about what happened and save it
         self.agent_actions_complete_history = []
 
@@ -49,7 +66,10 @@ class FrequencySpectrumEnv(gym.Env):
             verbose (bool, optional): . Defaults to False.
 
         Returns:
-            _type_: _description_
+           (obs_n,
+           reward_n,
+           done_n,
+           info_n
         """
         
         obs_n = []
@@ -117,36 +137,59 @@ class FrequencySpectrumEnv(gym.Env):
         elif self.observation_type == "is_channel_available":
             observations = self._get_observation_is_channel_available(agent_actions_history)
         else:
-            raise KeyError(f"observation type needs to be in [aggregate, ].. got {self.observation_type}")
+            raise KeyError(f"observation type needs to be in [aggregate, own_actions, is_channel_available].. got {self.observation_type}")
 
         return observations
 
     def _get_observation_is_channel_available(self, agent_actions_history):
         """Channels available if no transmit or collision
 
-        # Channel states: 1 for no transmission, 0 for channel occupied, 1 for collisions
+        Channel states: 0 for no transmission, 1 for channel occupied, 1 for collisions
+
+        The example table below shows a slice along the agent dimension for 1 agent, a temporal length of 5, and 2 frequency bands.
+
+        |              |              | t | t-1 | t-2 | t-3 | t-4 |
+        |--------------|--------------|---|-----|-----|-----|-----|
+        | Band Status: |  Freq Band 1 | 0 | 1   | 0   | 1   | 1   |
+        | Band Status: |  Freq Band 0 | 0 | 1   | 1   | 0   | 0   |
 
         Args:
-            agent_actions_history (_type_): Complete information about who attempted communication where. Shape is (num_time, num_freq + 1, num_agents)
+            agent_actions_history (np.array): Complete information about who attempted communication where. 
+                Shape is (num_time, num_freq + 1, num_agents)
         
         Returns:
-            list(states): state for all agents has shape (num_agents, num_in_time, __)
+           np.array: state for all agents has shape (num_agents, num_in_time, self.num_freq_bands)
         """
-        # SUM - to get collisions on temporal amount
         obvs = agent_actions_history.sum(axis=2).reshape((self.temporal_len, -1))
-        # Results in -1 ACK for collision
-        # obvs[obvs >= 2] = 2
-
         # For collisions we'll just say channel busy
         obvs[obvs >= 2] = 1
-
-
+        # Channel 0 is for no transmit. Can't observe that from other agents
         obvs = obvs[:, 1:]
-        # obvs = 1 - obvs
         obvs = np.tile(obvs, (self.num_agents, 1, 1))
         return obvs
 
     def _get_observation_aggregate(self, agent_actions_history):
+        """Observation where agents can see what other agents are doing and channel status
+
+        The example table below shows a slice along the agent dimension for 1 agent, a temporal length of 5, and 2 frequency bands.
+
+        |              |              | t | t-1 | t-2 | t-3 | t-4 |
+        |--------------|--------------|---|-----|-----|-----|-----|
+        | Band Status: |  Freq Band 1 | 0 | 1   | 0   | 1   | 1   |
+        | Band Status: |  Freq Band 0 | 0 | 1   | 1   | 0   | 0   |
+        | Action:      |  Freq Band 1 | 0 | 0   | 0   | 1   | 0   |
+        | Action:      |  Freq Band 0 | 0 | 1   | 1   | 0   | 0   |
+        | Action:      |  No Transmit | 1 | 0   | 0   | 0   | 1   |
+        | Success:     |              | 0 | 1   | -1  | -1  | 0   |
+
+        Args:
+            agent_actions_history (np.array): Complete information about who attempted communication where. 
+                Shape is (num_time, num_freq + 1, num_agents)
+
+        Returns:
+            np.array: state for all agents has shape (num_agents, num_in_time, 2*self.num_freq_bands + 2) 
+                Note:( self.num_freq_bands + 1) actions, 1 for transmission status, self.num_freq_bands channel status
+        """
         obvs1 = self._get_observation_is_channel_available(agent_actions_history)
         obvs2 = self._get_observation_own_actions(agent_actions_history)
         obvs = np.concatenate([obvs1, obvs2], axis=2)
@@ -155,38 +198,37 @@ class FrequencySpectrumEnv(gym.Env):
     def _get_observation_own_actions(self, agent_actions_history):
         """Get the observation for an agent
 
-        Each agent only knows it's own chosen action and whether it got a reward
+        Each agent knows it's own chosen action (one hot encoded) and,
+        The transmision status: 0: No transmit, 1: success, -1: collision
 
-        this state is returned as 
-        0: No transmit
-        1: success
-        -1: collision
+        |                     | t | t-1 | t-2 | t-3 | t-4 |
+        |---------------------|---|-----|-----|-----|-----|
+        |         Freq Band 1 | 0 | 0   | 0   | 1   | 0   |
+        |         Freq Band 0 | 0 | 1   | 1   | 0   | 0   |
+        |         No Transmit | 1 | 0   | 0   | 0   | 1   |
+        | Transmission Status | 0 | 1   | -1  | -1  | 0   |
 
         Args:
             agent_actions_history (_type_): Complete information about who attempted communication where. Shape is (num_time, num_freq + 1, num_agents)
         
         Returns:
-            list(states): state for all agents has shape (num_agents, num_in_time, __)
+            np.array: state for all agents has shape (num_agents, num_in_time, self.num_freq_bands + 1 + 1) 
+                Note: self.num_freq_bands + 1 actions and 1 for transmission status
         """
         channel_usage = agent_actions_history.sum(axis=2)
         channel_usage = channel_usage[:, :, np.newaxis]
         # Not possible to have collisions in the no transmit state
         channel_usage[:, 0, 0] = 0
-
-
-        #TODO: Rewards shouldn't be calculated here..
         # agent_actions_history only has a 1 in each row. So elementwise multiplication picks out successful transmissions or collisions
         # and then summing along that access just pulls only that element
         # SUM - to get collisions on temporal amount then pick out specifics for agent
-        rewards = np.sum(agent_actions_history * channel_usage, axis=1)
-        rewards = rewards[:, np.newaxis, :]
-        obvs = np.concatenate([agent_actions_history, rewards], axis=1)
+        transmission_status = np.sum(agent_actions_history * channel_usage, axis=1)
+        transmission_status = transmission_status[:, np.newaxis, :]
+        obvs = np.concatenate([agent_actions_history, transmission_status], axis=1)
         obvs = np.swapaxes(obvs, 0, 1)
         obvs = np.swapaxes(obvs, 0, 2)
-
         # Replace collisions with -1 so NN can learn easier
         obvs[obvs >= 2] = -1
-        
         return obvs
 
     def agent_actions_to_rewards(self, agent_actions, action_ints):
@@ -217,8 +259,8 @@ class FrequencySpectrumEnv(gym.Env):
         Choosing 0 action (no transmit) can't result in a reward
 
         Args:
-            agent_actions (_type_): Complete information about who attempted communication where. Shape is (num_freq + 1, num_agents)
-            action_ints (_type_): Int representation of what agents chose Shape is (num_agents)
+            agent_actions (np.array): Complete information about who attempted communication where. Shape is (num_freq + 1, num_agents)
+            action_ints (np.array): Int representation of what agents chose Shape is (num_agents)
         
         Returns:
             list(states): rewards for all agents has shape (num_agents, 1)
@@ -322,8 +364,8 @@ class FrequencySpectrumEnv(gym.Env):
         Agents get the sum of all agent rewards
 
         Args:
-            agent_actions (_type_): Complete information about who attempted communication where. Shape is (num_freq + 1, num_agents)
-            action_ints (_type_): Int representation of what agents chose Shape is (num_agents)
+            agent_actions (np.array): Complete information about who attempted communication where. Shape is (num_freq + 1, num_agents)
+            action_ints (np.array): Int representation of what agents chose Shape is (num_agents)
         
         Returns:
             list(states): rewards for all agents has shape (num_agents, 1)
