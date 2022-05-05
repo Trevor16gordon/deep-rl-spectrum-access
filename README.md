@@ -5,13 +5,36 @@
 In this project I'm looking to solve the problem of uncoordinated spectrum access. As described in the [DARPA Collaboration Challenge](<https://www.darpa.mil/program/spectrum-collaboration-challenge>), the number of devices communicating using the RF spectrum continues to increase. Historically, there have been centralized rigid rules for what devices can access specific frequency bands at any given time. As the number of devices increases, we need to find ways to share the frequency spectrum more efficiently. Deep Reinforcement Learning (DRL) is a promising framework for autonomous agents to learn usage patterns in the frequency spectrum and dynamically adapt to changing environments.
 
 
-## Installation
+# Installation
+```pip install -r requirements.txt```
 
+# Training
+```
+usage: train.py [-h] [--learning_rate LEARNING_RATE] [--eps_decay EPS_DECAY] [--epsilon EPSILON] [--num_agents NUM_AGENTS] [--num_bands NUM_BANDS] [--temporal_length TEMPORAL_LENGTH]
+                [--reward_type REWARD_TYPE] [--obs_type OBS_TYPE] [--agents_shared_memory AGENTS_SHARED_MEMORY] [--buffer_size BUFFER_SIZE] [--episode_len EPISODE_LEN]
+                [--temperature TEMPERATURE] [--reward_history_len REWARD_HISTORY_LEN] [--model_type MODEL_TYPE] [--agent_homogeneity AGENT_HOMOGENEITY]
 
-## Training
+optional arguments:
+  -h, --help            show this help message and exit
+  --learning_rate LEARNING_RATE, -lr LEARNING_RATE
+  --eps_decay EPS_DECAY, -epsd EPS_DECAY
+  --epsilon EPSILON, -eps EPSILON
+  --num_agents NUM_AGENTS, -na NUM_AGENTS
+  --num_bands NUM_BANDS, -b NUM_BANDS
+  --temporal_length TEMPORAL_LENGTH, -tl TEMPORAL_LENGTH
+  --reward_type REWARD_TYPE, -r REWARD_TYPE
+  --obs_type OBS_TYPE, -o OBS_TYPE
+  --agents_shared_memory AGENTS_SHARED_MEMORY, -sm AGENTS_SHARED_MEMORY
+  --buffer_size BUFFER_SIZE, -bs BUFFER_SIZE
+  --episode_len EPISODE_LEN, -el EPISODE_LEN
+  --temperature TEMPERATURE, -t TEMPERATURE
+  --reward_history_len REWARD_HISTORY_LEN, -rhl REWARD_HISTORY_LEN
+  --model_type MODEL_TYPE, -mt MODEL_TYPE
+  --agent_homogeneity AGENT_HOMOGENEITY, -ah AGENT_HOMOGENEITY
+  ```
 
-## Visualization
-To look at the model performance and interactively look at what the agent's value neural networks are doing, use the interactive plotter with:
+# To Visualize After / During Training
+During training, data is periodically saved. To look at the model performance and interactively look at what the agent's value neural networks are doing, use the interactive plotter with:
 ```python serve_dash_plotting.py -p your_local_folder/static/example_output_data/history.csv```
 
 look for the link "Dash is running on http://127.0.0.1:8051/" and open that link in your browser. Use the slider to zoom in on a specific section
@@ -21,7 +44,12 @@ look for the link "Dash is running on http://127.0.0.1:8051/" and open that link
 
 ## Overview of Repo Structure
 
-- environment.py
+- **environment.py**: A custom openai gym environment to represent the multi agent dynamic spectrum access problem. This file contains the logic for keeping track of agent's action and return rewards and observations to the agents. This environment can be configured for different types of reward and observation situations.
+- **agent.py**: Contains different types of agents with their own policies (learned or static) for determining how they should act in their environment.
+- **model.py**: Contains the tensorflow deep learning models
+- **serve_dash_plotting.py**: This file is used for interactive visualization of a training run. Instructions for using are in the Visualize Section of this readme.
+- **run_all_experiments.py**: This file contains calls to run specific experiments
+- **utils.py**: This file contains utility functions mostly for reshaping array and preparing data to save
 
 # Documentation
 
@@ -92,7 +120,7 @@ Reward Type can be any of the following:
 1. **transmission1**: Agents receive +1 for successful transmissions and 0 otherwise.
 2. **collisionpenality1**: Agents receive +1 for successful transmissions, 0 for no transmit, and -1 for collisions.
 3. **collisionpenality2**: Agents receive +2 for successful transmissions, 0 for no transmit, and -1 for collisions.
-4. **centralized**: All agents recieve the sum of all agent rewards.
+4. **centralized**: All agents recieve the Psum of all agent rewards.
 5. **transmision_normalized**: Positive reward modification: Original rewards taken from collisionpenality2 then scaled by the following. Successful transmissions scaled by the percentage of previous timesteps where the agent didn't transmit. They are divided by the percentage of previous timesteps where the agent had successful transmissions. The opposite scaling is used for collisions. As a result, agents who haven't been transmitting will have larger rewards and smaller collision penalties compared to agents who have had successful transmissions. The complete formulas are shown below:
 
 
@@ -107,8 +135,7 @@ Several papers have started by using the popular Deep Q Learning (DQN) reinforce
 
 # Results
 
-## One Primary User
-
+Here is
 
 
 # References
