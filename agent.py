@@ -108,7 +108,7 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         DynamicSpectrumAccessAgentBase (_type_): _description_
     """
 
-    def __init__(self, num_bands, obvs_space_dim, gamma=0.9, epsilon=0.02, replace=100, temperature=0.005, lr=0.0001, temporal_length=6, epsilon_decay=1e-3, buffer_size=1000):
+    def __init__(self, num_bands, obvs_space_dim, gamma=0.9, epsilon=0.02, replace=100, temperature=0.005, learning_rate=0.0001, temporal_length=6, epsilon_decay=1e-3, buffer_size=1000):
         self.num_bands = num_bands
         self.n_action_space = num_bands + 1
         self.gamma = gamma
@@ -123,7 +123,7 @@ class DynamicSpectrumAccessAgent1(DynamicSpectrumAccessAgentBase):
         self.batch_size = 6
         self.q_net = DDQN(num_bands, obvs_space_dim, temporal_length)
         self.target_net = DDQN(num_bands, obvs_space_dim, temporal_length)
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
         self.loss_fn = tf.keras.losses.MeanSquaredError()
         # self.q_net.compile(loss='MeanSquaredError', optimizer=opt, run_eagerly=True)
         self.update_target()
@@ -238,7 +238,7 @@ class DynamicSpectrumAccessAgentActorCritic(DynamicSpectrumAccessAgentBase):
         DynamicSpectrumAccessAgentBase (_type_): _description_
     """
 
-    def __init__(self, num_bands, obvs_space_dim, gamma=0.9, epsilon=0.02, lr=0.0001, temporal_length=6, epsilon_decay=1e-3):
+    def __init__(self, num_bands, obvs_space_dim, gamma=0.9, epsilon=0.02, learning_rate=0.0001, temporal_length=6, epsilon_decay=1e-3):
         super(DynamicSpectrumAccessAgentActorCritic, self).__init__()
         self.num_bands = num_bands
         self.n_action_space = num_bands + 1
@@ -252,13 +252,8 @@ class DynamicSpectrumAccessAgentActorCritic(DynamicSpectrumAccessAgentBase):
         self.temporal_length = temporal_length
 
         self.actor_critic = ActorCritic(num_bands, obvs_space_dim, temporal_length)
-        self.actor_critic_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+        self.actor_critic_optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
-        # self.actor = Actor(num_bands, obvs_space_dim, temporal_length)
-        # self.critic = Critic(num_bands, obvs_space_dim, temporal_length)
-        # self.actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-        # self.critic_optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-        
         self.loss_fn = tf.keras.losses.MeanSquaredError()
         
         self.agent_id = [str(x) for x in np.random.randint(
