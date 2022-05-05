@@ -1,2 +1,4 @@
 *plots*
 *output*
+*pycache*
+*.DS_store*
