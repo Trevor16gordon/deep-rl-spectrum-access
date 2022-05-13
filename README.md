@@ -4,6 +4,7 @@
 
 In this project I'm looking to solve the problem of uncoordinated spectrum access. As described in the [DARPA Collaboration Challenge](<https://www.darpa.mil/program/spectrum-collaboration-challenge>), the number of devices communicating using the RF spectrum continues to increase. Historically, there have been centralized rigid rules for what devices can access specific frequency bands at any given time. As the number of devices increases, we need to find ways to share the frequency spectrum more efficiently. Deep Reinforcement Learning (DRL) is a promising framework for autonomous agents to learn usage patterns in the frequency spectrum and dynamically adapt to changing environments.
 
+See ![this report](https://github.com/Trevor16gordon/deep-rl-spectrum-access/blob/trevor_develop/Report.pdf) for in depth analysis on the problem and results!
 
 # Installation
 ```pip install -r requirements.txt```
