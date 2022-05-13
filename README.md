@@ -136,7 +136,9 @@ Several papers have started by using the popular Deep Q Learning (DQN) reinforce
 
 # Results
 
-Here is
+Here is an example of 3 agents learning to coordinate and share 2 available spectrum bands. See [this report](https://github.com/Trevor16gordon/deep-rl-spectrum-access/blob/trevor_develop/Report.pdf) for in depth analysis on the problem and results!
+
+![image](https://github.com/Trevor16gordon/deep-rl-spectrum-access/blob/trevor_develop/static/images/three_agents_two_bands.jpg)
 
 
 # References
