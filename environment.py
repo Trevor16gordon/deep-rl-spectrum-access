@@ -8,6 +8,10 @@ from gym import spaces
 
 class FrequencySpectrumEnv(gym.Env):
     """Multi Agent Environment for dynamics spectrum access
+
+    A custom openai gym environment to represent the multi agent dynamic spectrum access problem. 
+    This file contains the logic for keeping track of agent's action and return rewards and observations to the agents. 
+    This environment can be configured for different types of reward and observation situations.
     
     - At each timestep, agents choose with frequency band to transmit on, or to not transmit at all.
     - The goal is to maximize channel utilization and make sure all agents have roughly the same number of successful packets.

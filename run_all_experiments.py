@@ -42,7 +42,7 @@ def run_experiment_basic_coordination_one_primary_user_actor_critic():
     1 Agent is a learning agent
     """
 
-    class TrainingConfigOnePrimaryUser():
+    class TrainingConfigOnePrimaryUserActorCritic():
         """
         Config for training Info GAN
         """
@@ -62,7 +62,7 @@ def run_experiment_basic_coordination_one_primary_user_actor_critic():
         model_type = "actorcritic"
         agent_homogeneity = "one_periodic"
 
-    train_agents(TrainingConfigOnePrimaryUser)
+    train_agents(TrainingConfigOnePrimaryUserActorCritic)
 
 def run_experiment_coordination_two_agents():
     """Basic learning experiment
@@ -102,7 +102,7 @@ def run_experiment_coordination_three_agents():
     1 Agent is a learning agent
     """
 
-    class TrainingConfigTwoAgents():
+    class TrainingConfigThreeAgents():
         """
         Config for training Info GAN
         """
@@ -122,7 +122,7 @@ def run_experiment_coordination_three_agents():
         model_type = "ddqn"
         agent_homogeneity = "all_same"
 
-    train_agents(TrainingConfigTwoAgents)
+    train_agents(TrainingConfigThreeAgents)
 
 if __name__ == "__main__":
 
